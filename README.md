@@ -4,10 +4,6 @@
 
 **ShchametAI** is a cross-platform chess application built with Angular 21 and Tauri, featuring a complete chess engine, AI-powered move suggestions via Google Gemini, and full internationalization support (Hebrew RTL/English LTR).
 
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
 ## Technical Architecture
 
 ### Frontend Stack
@@ -160,5 +156,4 @@ Private project - All rights reserved.
 
 ## Links
 
-- AI Studio App: https://ai.studio/apps/drive/1oOMbH_lSKi3s-aR-AnHldvFhdYuUqgPk
 - GitHub Repository: https://github.com/abaye123/shchametai

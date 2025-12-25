@@ -1,5 +1,6 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
 import { SoundService } from './sound.service';
+import { GameHistoryService } from './game-history.service';
 
 export type Color = 'w' | 'b';
 export type PieceType = 'p' | 'r' | 'n' | 'b' | 'q' | 'k';
@@ -27,6 +28,7 @@ export interface Move {
 })
 export class ChessEngineService {
   private soundService = inject(SoundService);
+  private historyService = inject(GameHistoryService);
 
   // State
   board = signal<(Piece | null)[][]>([]);
@@ -104,9 +106,15 @@ export class ChessEngineService {
     }
   }
 
-  makeMove(from: Position, to: Position) {
+  makeMove(from: Position, to: Position, skipHistoryRecord = false) {
     const board = this.board();
-    const piece = board[from.row][from.col]!;
+    const piece = board[from.row][from.col];
+    
+    if (!piece) {
+      console.warn('Attempted to move non-existent piece');
+      return;
+    }
+    
     const captured = board[to.row][to.col];
 
     const newBoard = this.copyBoard(board);
@@ -118,18 +126,30 @@ export class ChessEngineService {
       newBoard[to.row][to.col] = { type: 'q', color: piece.color };
     }
 
+    const move: Move = { from, to, piece, captured: captured || undefined };
+
     this.board.set(newBoard);
-    this.history.update(h => [...h, { from, to, piece, captured: captured || undefined }]);
+    this.history.update(h => [...h, move]);
     this.turn.set(this.turn() === 'w' ? 'b' : 'w');
     this.selectedSquare.set(null);
     this.validMoves.set([]);
 
+    // Record move in history service only if not skipping
+    if (!skipHistoryRecord) {
+      this.historyService.recordMove(move);
+    }
+
     this.updateGameStatus();
-    this.triggerMoveSound(!!captured);
+    
+    if (!skipHistoryRecord) {
+      this.triggerMoveSound(!!captured);
+    }
   }
 
   private triggerMoveSound(wasCapture: boolean) {
-    if (this.isCheckmate() || this.isStalemate()) {
+    if (this.isCheckmate()) {
+      this.soundService.play('checkmate');
+    } else if (this.isStalemate()) {
       this.soundService.play('game-over');
     } else if (this.isCheck()) {
       this.soundService.play('check');
@@ -151,9 +171,14 @@ export class ChessEngineService {
     if (!hasMoves) {
       if (inCheck) {
         this.isCheckmate.set(true);
-        this.winner.set(currentTurn === 'w' ? 'b' : 'w');
+        const winnerColor = currentTurn === 'w' ? 'b' : 'w';
+        this.winner.set(winnerColor);
+        // Update game result in history
+        this.historyService.updateGameResult(winnerColor === 'w' ? 'white' : 'black');
       } else {
         this.isStalemate.set(true);
+        // Update game result as draw
+        this.historyService.updateGameResult('draw');
       }
     } else {
         this.isCheckmate.set(false);

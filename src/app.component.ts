@@ -1,146 +1,170 @@
-import { Component, inject, signal, effect, untracked } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { I18nService } from './services/i18n.service';
-import { ChessEngineService, Color, Piece } from './services/chess-engine.service';
-import { BoardComponent } from './components/board.component';
-import { GoogleGenAI } from "@google/genai";
-import { ComputerOpponentService } from './services/computer-opponent.service';
+import { ChessEngineService } from './services/chess-engine.service';
 import { SoundService } from './services/sound.service';
-
-export type GameMode = 'human' | 'computer';
-export type Difficulty = 'easy' | 'medium' | 'hard';
+import { GameHistoryService } from './services/game-history.service';
+import { WelcomeScreenComponent } from './components/welcome-screen.component';
+import { SettingsScreenComponent } from './components/settings-screen.component';
+import { GameScreenComponent } from './components/game-screen.component';
+import { HistoryScreenComponent } from './components/history-screen.component';
+import { GameMode, Difficulty, AppScreen } from './models/app.types';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, BoardComponent],
+  imports: [
+    CommonModule,
+    WelcomeScreenComponent,
+    SettingsScreenComponent,
+    GameScreenComponent,
+    HistoryScreenComponent
+  ],
   templateUrl: './app.component.html'
 })
 export class AppComponent {
   i18n = inject(I18nService);
   chess = inject(ChessEngineService);
-  computer = inject(ComputerOpponentService);
   sound = inject(SoundService);
+  history = inject(GameHistoryService);
+
+  // App State
+  currentScreen = signal<AppScreen>('welcome');
 
   // Game Settings
   gameMode = signal<GameMode>('human');
   difficulty = signal<Difficulty>('medium');
-  showSettings = signal<boolean>(false);
-  
-  // AI/Hint State
-  aiHintText = signal<string>('');
-  isThinking = signal<boolean>(false);
-  isComputerMoving = signal<boolean>(false);
+
+  // API Key management
+  apiKey = signal<string>('');
 
   constructor() {
-    // Effect to trigger Computer move
-    effect(() => {
-      const turn = this.chess.turn();
-      const mode = this.gameMode();
-      const gameOver = this.chess.winner() || this.chess.isStalemate();
-
-      // Assuming computer plays Black for now
-      if (mode === 'computer' && turn === 'b' && !gameOver && !untracked(this.isComputerMoving)) {
-        this.makeComputerMove();
-      }
-    });
+    // Load saved API key
+    this.loadApiKey();
   }
 
-  toggleSettings() {
-    this.showSettings.update(v => !v);
+  // Navigation
+  goToWelcome() {
+    this.currentScreen.set('welcome');
   }
 
-  setGameMode(mode: GameMode) {
-    this.gameMode.set(mode);
+  goToHistory() {
+    this.currentScreen.set('history');
   }
 
-  setDifficulty(diff: Difficulty) {
-    this.difficulty.set(diff);
+  goToGame() {
+    this.currentScreen.set('game');
   }
 
-  restartGame() {
+  goToSettings() {
+    this.currentScreen.set('settings');
+  }
+
+  // Game Management
+  startNewGame(config: { gameMode: GameMode; difficulty: Difficulty }) {
+    this.gameMode.set(config.gameMode);
+    this.difficulty.set(config.difficulty);
+
+    // Start game in history service
+    this.history.startNewGame(config.gameMode, config.difficulty);
+
+    // Reset chess engine
     this.chess.resetGame();
-    this.showSettings.set(false);
-    this.aiHintText.set('');
+    this.currentScreen.set('game');
   }
 
-  async makeComputerMove() {
-    this.isComputerMoving.set(true);
-    // Small delay for realism/UI update
-    await new Promise(r => setTimeout(r, 500)); 
-    
-    try {
-      const move = await this.computer.getBestMove('b', this.difficulty());
-      if (move) {
-        this.chess.makeMove(move.from, move.to);
+  applySettings(config: { gameMode: GameMode; difficulty: Difficulty }) {
+    this.gameMode.set(config.gameMode);
+    this.difficulty.set(config.difficulty);
+    this.goToGame();
+  }
+
+  // History Screen Actions
+  loadGame(gameId: string) {
+    this.history.loadGameForReplay(gameId);
+    this.currentScreen.set('game');
+  }
+
+  deleteGame(gameId: string) {
+    this.history.deleteGame(gameId);
+  }
+
+  clearAllGames() {
+    this.history.clearAllGames();
+  }
+
+  exportGames() {
+    const data = this.history.exportGames();
+    this.downloadJSON(data, 'shachmatai-games.json');
+  }
+
+  exportSingleGame(gameId: string) {
+    const data = this.history.exportGame(gameId);
+    if (data) {
+      this.downloadJSON(data, `shachmatai-game-${gameId}.json`);
+    }
+  }
+
+  toggleFavorite(gameId: string) {
+    this.history.toggleFavorite(gameId);
+  }
+
+  importGames(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const success = this.history.importGames(content);
+
+        if (success) {
+          alert(this.i18n.currentLang() === 'he' ? 'ייבוא הצליח!' : 'Import successful!');
+        } else {
+          alert(this.i18n.currentLang() === 'he' ? 'שגיאה: פורמט קובץ לא תקין' : 'Error: Invalid file format');
+        }
+      } catch (e) {
+        alert(this.i18n.currentLang() === 'he' ? 'שגיאה בקריאת הקובץ' : 'Error reading file');
       }
-    } finally {
-      this.isComputerMoving.set(false);
-    }
-  }
-
-  // Computed captured pieces
-  getCaptured(color: Color): Piece[] {
-    const history = this.chess.history();
-    return history
-      .filter(m => m.captured && m.captured.color === color)
-      .map(m => m.captured!);
-  }
-
-  getPieceSymbol(piece: Piece): string {
-    const symbols: Record<string, string> = {
-      'w-k': '♔', 'w-q': '♕', 'w-r': '♖', 'w-b': '♗', 'w-n': '♘', 'w-p': '♙',
-      'b-k': '♚', 'b-q': '♛', 'b-r': '♜', 'b-b': '♝', 'b-n': '♞', 'b-p': '♟︎'
+      // Reset input
+      input.value = '';
     };
-    return symbols[`${piece.color}-${piece.type}`] || '';
+
+    reader.readAsText(file);
   }
 
-  async getAiHint() {
-    // Basic offline check
-    if (!navigator.onLine) {
-      this.aiHintText.set(this.i18n.t().offline);
-      return;
-    }
+  // Utility
+  private downloadJSON(data: string, filename: string) {
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
-    if (!process.env['API_KEY']) {
-       this.aiHintText.set("No API Key configured.");
-       return;
-    }
-
-    this.isThinking.set(true);
-    this.aiHintText.set('');
-
+  // API Key Management
+  loadApiKey() {
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env['API_KEY'] });
-      
-      // Convert board to string representation for the AI
-      const boardStr = this.chess.board().map(row => 
-        row.map(p => p ? `${p.color}${p.type}` : '--').join(' ')
-      ).join('\n');
-
-      const turnColor = this.chess.turn() === 'w' ? 'White' : 'Black';
-      const prompt = `
-        You are a chess coach. Analyze this board position.
-        Board (Row 0 is rank 8, Row 7 is rank 1):
-        ${boardStr}
-        
-        It is ${turnColor}'s turn.
-        Suggest a good move and explain why briefly in ${this.i18n.currentLang() === 'he' ? 'Hebrew' : 'English'}.
-        Keep it under 2 sentences.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-      });
-
-      this.aiHintText.set(response.text.trim());
-
+      const saved = localStorage.getItem('gemini_api_key');
+      if (saved) {
+        this.apiKey.set(saved);
+      }
     } catch (e) {
-      console.error(e);
-      this.aiHintText.set('Error fetching hint.');
-    } finally {
-      this.isThinking.set(false);
+      console.error('Failed to load API key:', e);
+    }
+  }
+
+  updateApiKey(key: string) {
+    this.apiKey.set(key);
+    try {
+      localStorage.setItem('gemini_api_key', key);
+    } catch (e) {
+      console.error('Failed to save API key:', e);
     }
   }
 }

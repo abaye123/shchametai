@@ -1,5 +1,5 @@
 {
-  "name": "ChessMaster i18n",
+  "name": "ShchametAI",
   "description": "A fully functional offline Chess application supporting Hebrew (RTL) and English (LTR). Features a complete chess engine, move validation, check detection, and responsive design.",
   "requestFramePermissions": []
 }

@@ -20,6 +20,9 @@
             "tsConfig": "tsconfig.json",
             "assets": [
               "src/assets"
+            ],
+            "styles": [
+              "index.css"
             ]
           },
           "configurations": {

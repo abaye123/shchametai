@@ -8,6 +8,7 @@ export type PieceType = 'p' | 'r' | 'n' | 'b' | 'q' | 'k';
 export interface Piece {
   type: PieceType;
   color: Color;
+  hasMoved?: boolean; // Track if piece has moved for castling
 }
 
 export interface Position {
@@ -21,6 +22,8 @@ export interface Move {
   piece: Piece;
   captured?: Piece;
   isCastle?: boolean;
+  castleRookFrom?: Position;
+  castleRookTo?: Position;
 }
 
 @Injectable({
@@ -67,10 +70,20 @@ export class ChessEngineService {
     
     // Revert board
     const newBoard = this.copyBoard(this.board());
-    newBoard[lastMove.from.row][lastMove.from.col] = lastMove.piece;
+    
+    // Move piece back
+    const piece = { ...lastMove.piece };
+    newBoard[lastMove.from.row][lastMove.from.col] = piece;
     newBoard[lastMove.to.row][lastMove.to.col] = lastMove.captured || null;
 
-    // Handle castling revert (simplified: ignoring complex castling rights restore for now)
+    // Handle castling revert
+    if (lastMove.isCastle && lastMove.castleRookFrom && lastMove.castleRookTo) {
+      const rook = newBoard[lastMove.castleRookTo.row][lastMove.castleRookTo.col];
+      if (rook) {
+        newBoard[lastMove.castleRookFrom.row][lastMove.castleRookFrom.col] = { ...rook };
+        newBoard[lastMove.castleRookTo.row][lastMove.castleRookTo.col] = null;
+      }
+    }
     
     this.board.set(newBoard);
     this.history.update(h => h.slice(0, -1));
@@ -116,17 +129,51 @@ export class ChessEngineService {
     }
     
     const captured = board[to.row][to.col];
-
     const newBoard = this.copyBoard(board);
-    newBoard[to.row][to.col] = piece;
+    
+    // Check if this is a castling move
+    const isCastleMove = piece.type === 'k' && Math.abs(to.col - from.col) === 2;
+    let castleRookFrom: Position | undefined;
+    let castleRookTo: Position | undefined;
+
+    if (isCastleMove) {
+      // King-side castle (moving right)
+      if (to.col > from.col) {
+        castleRookFrom = { row: from.row, col: 7 };
+        castleRookTo = { row: from.row, col: to.col - 1 };
+      }
+      // Queen-side castle (moving left)
+      else {
+        castleRookFrom = { row: from.row, col: 0 };
+        castleRookTo = { row: from.row, col: to.col + 1 };
+      }
+      
+      // Move the rook
+      const rook = newBoard[castleRookFrom.row][castleRookFrom.col];
+      if (rook) {
+        newBoard[castleRookTo.row][castleRookTo.col] = { ...rook, hasMoved: true };
+        newBoard[castleRookFrom.row][castleRookFrom.col] = null;
+      }
+    }
+
+    // Move the piece
+    newBoard[to.row][to.col] = { ...piece, hasMoved: true };
     newBoard[from.row][from.col] = null;
 
     // Pawn promotion (auto Queen for simplicity)
     if (piece.type === 'p' && (to.row === 0 || to.row === 7)) {
-      newBoard[to.row][to.col] = { type: 'q', color: piece.color };
+      newBoard[to.row][to.col] = { type: 'q', color: piece.color, hasMoved: true };
     }
 
-    const move: Move = { from, to, piece, captured: captured || undefined };
+    const move: Move = { 
+      from, 
+      to, 
+      piece, 
+      captured: captured || undefined,
+      isCastle: isCastleMove,
+      castleRookFrom,
+      castleRookTo
+    };
 
     this.board.set(newBoard);
     this.history.update(h => [...h, move]);
@@ -200,19 +247,81 @@ export class ChessEngineService {
       case 'b': moves = this.getSlidingMoves(pos, [[1,1], [1,-1], [-1,1], [-1,-1]], board); break;
       case 'q': moves = this.getSlidingMoves(pos, [[0,1], [0,-1], [1,0], [-1,0], [1,1], [1,-1], [-1,1], [-1,-1]], board); break;
       case 'n': moves = this.getSteppingMoves(pos, [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]], board); break;
-      case 'k': moves = this.getSteppingMoves(pos, [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]], board); break;
+      case 'k': 
+        moves = this.getSteppingMoves(pos, [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]], board);
+        // Only add castling moves when checking for actual moves, not when checking for attacks
+        if (checkSafety) {
+          moves = moves.concat(this.getCastlingMoves(pos, piece.color, board));
+        }
+        break;
     }
 
     if (checkSafety) {
       moves = moves.filter(move => {
-        const newBoard = this.copyBoard(board);
-        newBoard[move.row][move.col] = newBoard[pos.row][pos.col];
-        newBoard[pos.row][pos.col] = null;
+        const newBoard = this.simulateMove(board, pos, move);
         return !this.isKingInCheck(piece.color, newBoard);
       });
     }
 
     return moves;
+  }
+
+  private getCastlingMoves(kingPos: Position, color: Color, board: (Piece | null)[][]): Position[] {
+    const moves: Position[] = [];
+    const king = board[kingPos.row][kingPos.col];
+    
+    // King must not have moved
+    if (!king || king.hasMoved) return moves;
+    
+    // King must not be in check
+    if (this.isKingInCheck(color, board)) return moves;
+    
+    const row = kingPos.row;
+    
+    // King-side castling (short castle)
+    const kingRook = board[row][7];
+    if (kingRook && kingRook.type === 'r' && kingRook.color === color && !kingRook.hasMoved) {
+      // Check if squares between king and rook are empty
+      if (!board[row][5] && !board[row][6]) {
+        // Check if king doesn't move through check
+        const through = { row, col: 5 };
+        const dest = { row, col: 6 };
+        
+        const throughBoard = this.simulateMove(board, kingPos, through);
+        const destBoard = this.simulateMove(board, kingPos, dest);
+        
+        if (!this.isKingInCheck(color, throughBoard) && !this.isKingInCheck(color, destBoard)) {
+          moves.push(dest);
+        }
+      }
+    }
+    
+    // Queen-side castling (long castle)
+    const queenRook = board[row][0];
+    if (queenRook && queenRook.type === 'r' && queenRook.color === color && !queenRook.hasMoved) {
+      // Check if squares between king and rook are empty
+      if (!board[row][1] && !board[row][2] && !board[row][3]) {
+        // Check if king doesn't move through check
+        const through = { row, col: 3 };
+        const dest = { row, col: 2 };
+        
+        const throughBoard = this.simulateMove(board, kingPos, through);
+        const destBoard = this.simulateMove(board, kingPos, dest);
+        
+        if (!this.isKingInCheck(color, throughBoard) && !this.isKingInCheck(color, destBoard)) {
+          moves.push(dest);
+        }
+      }
+    }
+    
+    return moves;
+  }
+
+  private simulateMove(board: (Piece | null)[][], from: Position, to: Position): (Piece | null)[][] {
+    const newBoard = this.copyBoard(board);
+    newBoard[to.row][to.col] = newBoard[from.row][from.col];
+    newBoard[from.row][from.col] = null;
+    return newBoard;
   }
 
   private getPawnMoves(pos: Position, color: Color, board: (Piece | null)[][]): Position[] {
@@ -336,13 +445,13 @@ export class ChessEngineService {
   }
 
   private copyBoard(board: (Piece | null)[][]): (Piece | null)[][] {
-    return board.map(row => row.slice());
+    return board.map(row => row.map(p => p ? { ...p } : null));
   }
 
   private createInitialBoard(): (Piece | null)[][] {
     const board: (Piece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
     const setupRow = (row: number, color: Color, pieces: PieceType[]) => {
-      pieces.forEach((type, col) => board[row][col] = { type, color });
+      pieces.forEach((type, col) => board[row][col] = { type, color, hasMoved: false });
     };
 
     const backRow: PieceType[] = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];

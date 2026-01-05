@@ -26,6 +26,7 @@ export class GameScreenComponent {
   gameMode = input.required<GameMode>();
   difficulty = input.required<Difficulty>();
   apiKey = input.required<string>();
+  playerColor = input<'w' | 'b'>('w');
 
   // Outputs
   backToMenu = output<void>();
@@ -46,10 +47,13 @@ export class GameScreenComponent {
     effect(() => {
       const turn = this.chess.turn();
       const mode = this.gameMode();
+      const playerColor = this.playerColor();
       const gameOver = this.chess.winner() || this.chess.isStalemate();
 
-      // Assuming computer plays Black
-      if (mode === 'computer' && turn === 'b' && !gameOver && !untracked(this.isComputerMoving)) {
+      // Computer plays the opposite color of the player
+      const computerColor = playerColor === 'w' ? 'b' : 'w';
+      
+      if (mode === 'computer' && turn === computerColor && !gameOver && !untracked(this.isComputerMoving)) {
         this.makeComputerMove();
       }
     });
@@ -68,7 +72,8 @@ export class GameScreenComponent {
     await new Promise(r => setTimeout(r, 500));
 
     try {
-      const move = await this.computer.getBestMove('b', this.difficulty());
+      const computerColor = this.playerColor() === 'w' ? 'b' : 'w';
+      const move = await this.computer.getBestMove(computerColor, this.difficulty());
       if (move) {
         this.chess.makeMove(move.from, move.to);
       }

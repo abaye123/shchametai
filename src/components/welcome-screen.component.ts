@@ -55,6 +55,36 @@ import { GameMode, Difficulty } from '../models/app.types';
               </div>
             }
           </div>
+
+          <!-- Player Color Selection (for computer mode) -->
+          @if (selectedGameMode === 'computer') {
+            <div class="flex flex-col gap-2 mt-4">
+              <label class="font-semibold text-stone-700">{{ i18n.currentLang() === 'he' ? 'בחר צבע' : 'Choose Color' }}</label>
+              <div class="flex gap-2">
+                <button 
+                  (click)="selectedPlayerColor = 'w'"
+                  class="flex-1 py-2 rounded border transition-colors flex items-center justify-center gap-2"
+                  [class.bg-stone-200]="selectedPlayerColor === 'w'"
+                  [class.border-stone-400]="selectedPlayerColor === 'w'"
+                  [class.border-2]="selectedPlayerColor === 'w'"
+                  [class.bg-stone-50]="selectedPlayerColor !== 'w'">
+                  <span class="text-2xl">♔</span>
+                  <span class="font-semibold">{{ i18n.t().white }}</span>
+                </button>
+                <button 
+                  (click)="selectedPlayerColor = 'b'"
+                  class="flex-1 py-2 rounded border transition-colors flex items-center justify-center gap-2"
+                  [class.bg-stone-700]="selectedPlayerColor === 'b'"
+                  [class.text-white]="selectedPlayerColor === 'b'"
+                  [class.border-stone-800]="selectedPlayerColor === 'b'"
+                  [class.border-2]="selectedPlayerColor === 'b'"
+                  [class.bg-stone-50]="selectedPlayerColor !== 'b'">
+                  <span class="text-2xl">♚</span>
+                  <span class="font-semibold">{{ i18n.t().black }}</span>
+                </button>
+              </div>
+            </div>
+          }
         </div>
 
         <!-- Action Buttons -->
@@ -100,14 +130,16 @@ export class WelcomeScreenComponent {
 
   selectedGameMode: GameMode = 'human';
   selectedDifficulty: Difficulty = 'medium';
+  selectedPlayerColor: 'w' | 'b' = 'w';
 
-  startNewGame = output<{ gameMode: GameMode; difficulty: Difficulty }>();
+  startNewGame = output<{ gameMode: GameMode; difficulty: Difficulty; playerColor: 'w' | 'b' }>();
   goToHistory = output<void>();
 
   onStartNewGame() {
     this.startNewGame.emit({
       gameMode: this.selectedGameMode,
-      difficulty: this.selectedDifficulty
+      difficulty: this.selectedDifficulty,
+      playerColor: this.selectedPlayerColor
     });
   }
 

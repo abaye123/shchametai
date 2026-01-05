@@ -34,6 +34,7 @@ export class AppComponent {
   // Game Settings
   gameMode = signal<GameMode>('human');
   difficulty = signal<Difficulty>('medium');
+  playerColor = signal<'w' | 'b'>('w');
 
   // API Key management
   apiKey = signal<string>('');
@@ -61,9 +62,10 @@ export class AppComponent {
   }
 
   // Game Management
-  startNewGame(config: { gameMode: GameMode; difficulty: Difficulty }) {
+  startNewGame(config: { gameMode: GameMode; difficulty: Difficulty; playerColor: 'w' | 'b' }) {
     this.gameMode.set(config.gameMode);
     this.difficulty.set(config.difficulty);
+    this.playerColor.set(config.playerColor);
 
     // Start game in history service
     this.history.startNewGame(config.gameMode, config.difficulty);

@@ -62,9 +62,9 @@ import { GameHistoryService, GameRecord } from '../services/game-history.service
               <div class="border border-stone-200 rounded-lg p-4 hover:bg-stone-50 transition-colors">
                 <div class="flex items-start justify-between gap-4">
                   <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-2">
+                    <div class="flex items-center gap-2 mb-2 flex-wrap">
                       @if (game.gameName) {
-                        <span class="font-bold text-lg text-amber-900">
+                        <span class="font-bold text-lg text-amber-900 truncate max-w-xs" [title]="game.gameName">
                           {{ game.gameName }}
                         </span>
                         <span class="text-stone-400">•</span>
@@ -88,7 +88,21 @@ import { GameHistoryService, GameRecord } from '../services/game-history.service
                     <div class="text-sm text-stone-600 space-y-1">
                       <p>{{ i18n.t().gameDate }}: {{ formatDate(game.date) }}</p>
                       <p>{{ i18n.t().totalMoves }}: {{ game.moves.length }}</p>
-                      <p>{{ i18n.t().gameMode }}: {{ game.gameMode === 'computer' ? i18n.t().vsComputer : i18n.t().vsHuman }}</p>
+                      <p class="flex items-center gap-2">
+                        <span>{{ i18n.t().gameMode }}:</span>
+                        <span>{{ game.gameMode === 'computer' ? i18n.t().vsComputer : i18n.t().vsHuman }}</span>
+                        @if (game.gameMode === 'computer' && game.difficulty) {
+                          <span class="px-2 py-0.5 rounded text-xs font-semibold"
+                                [class.bg-green-100]="game.difficulty === 'easy'"
+                                [class.text-green-700]="game.difficulty === 'easy'"
+                                [class.bg-yellow-100]="game.difficulty === 'medium'"
+                                [class.text-yellow-700]="game.difficulty === 'medium'"
+                                [class.bg-red-100]="game.difficulty === 'hard'"
+                                [class.text-red-700]="game.difficulty === 'hard'">
+                            {{ getDifficultyText(game.difficulty) }}
+                          </span>
+                        }
+                      </p>
                     </div>
                   </div>
                   
@@ -196,6 +210,16 @@ export class HistoryScreenComponent {
       case 'draw': return lang === 'he' ? 'תיקו' : 'Draw';
       case 'ongoing': return lang === 'he' ? 'בתהליך' : 'Ongoing';
       default: return result;
+    }
+  }
+
+  getDifficultyText(difficulty: string): string {
+    const lang = this.i18n.currentLang();
+    switch (difficulty) {
+      case 'easy': return lang === 'he' ? 'קל' : 'Easy';
+      case 'medium': return lang === 'he' ? 'בינוני' : 'Medium';
+      case 'hard': return lang === 'he' ? 'קשה' : 'Hard';
+      default: return difficulty;
     }
   }
 }

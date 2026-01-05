@@ -22,6 +22,21 @@ import { I18nService } from '../services/i18n.service';
     .board-container {
       container-type: inline-size;
     }
+    /* Better visibility for white pieces on light squares */
+    .white-piece-shadow {
+      text-shadow: 
+        0 1px 3px rgba(0,0,0,0.6),
+        0 0 5px rgba(0,0,0,0.4),
+        -1px -1px 0 rgba(0,0,0,0.3),
+        1px -1px 0 rgba(0,0,0,0.3),
+        -1px 1px 0 rgba(0,0,0,0.3),
+        1px 1px 0 rgba(0,0,0,0.3);
+    }
+    .black-piece-shadow {
+      text-shadow: 
+        0 1px 2px rgba(0,0,0,0.4),
+        0 0 3px rgba(255,255,255,0.3);
+    }
   `],
   template: `
     <div class="board-container grid grid-cols-8 border-4 border-amber-900 rounded-lg overflow-hidden shadow-2xl select-none w-full max-w-[600px] aspect-square mx-auto bg-amber-900">
@@ -54,10 +69,11 @@ import { I18nService } from '../services/i18n.service';
 
             @if (piece) {
               <span 
-                class="chess-piece leading-none drop-shadow-sm transform hover:scale-105 transition-transform"
+                class="chess-piece leading-none transform hover:scale-105 transition-transform"
                 [class.text-white]="piece.color === 'w'"
                 [class.text-black]="piece.color === 'b'"
-                style="text-shadow: 0 1px 2px rgba(0,0,0,0.4);"
+                [class.white-piece-shadow]="piece.color === 'w'"
+                [class.black-piece-shadow]="piece.color === 'b'"
               >
                 {{ getPieceSymbol(piece) }}
               </span>

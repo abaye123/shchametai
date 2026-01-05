@@ -56,9 +56,17 @@
     <div class="flex items-center gap-3">
       <div class="text-lg font-bold flex items-center gap-2">
         @if (chess.turn() === 'w') {
-           <span class="text-2xl">♔</span> {{ i18n.t().turnWhite }}
+           <span class="text-2xl">♔</span> 
+           <span>{{ i18n.t().turnWhite }}</span>
+           @if (chess.isCheck()) {
+             <span class="text-red-600 font-bold animate-pulse">{{ i18n.t().check }}</span>
+           }
         } @else {
-           <span class="text-2xl">♚</span> {{ i18n.t().turnBlack }}
+           <span class="text-2xl">♚</span> 
+           <span>{{ i18n.t().turnBlack }}</span>
+           @if (chess.isCheck()) {
+             <span class="text-red-600 font-bold animate-pulse">{{ i18n.t().check }}</span>
+           }
         }
         @if (isComputerMoving()) {
           <span class="text-sm font-normal text-amber-600 animate-pulse ml-2">({{ i18n.t().aiThinking }})</span>
@@ -98,10 +106,6 @@
         <div class="text-2xl">{{ chess.winner() === 'w' ? i18n.t().white : i18n.t().black }}</div>
       </div>
     </div>
-  } @else if (chess.isCheck()) {
-    <div class="p-4 rounded-xl text-center font-bold text-lg bg-red-100 text-red-800 animate-pulse">
-      <span>{{ i18n.t().check }}</span>
-    </div>
   } @else if (chess.isStalemate()) {
     <div class="p-6 rounded-xl text-center font-bold text-2xl bg-gray-200 text-gray-800 shadow-lg">
       <div class="text-4xl mb-2">🤝</div>
@@ -113,17 +117,30 @@
   <div class="flex flex-col md:flex-row gap-8 items-start justify-center">
     
     <!-- Captured Pieces (Left/Right based on RTL) -->
-    <div class="hidden md:flex flex-col gap-2 w-16 bg-white p-2 rounded-lg shadow-sm h-[500px] justify-between">
-      <div class="flex flex-col gap-1 items-center">
-          @for (p of getCaptured('w'); track $index) {
-              <span class="text-2xl text-stone-400">{{ getPieceSymbol(p) }}</span>
-          }
-      </div>
-      <div class="border-t border-stone-200 my-2"></div>
-      <div class="flex flex-col gap-1 items-center">
-          @for (p of getCaptured('b'); track $index) {
-              <span class="text-2xl text-stone-800">{{ getPieceSymbol(p) }}</span>
-          }
+    <div class="hidden md:block w-20 relative">
+      <div class="sticky top-24">
+        <div class="bg-white p-3 rounded-lg shadow-sm">
+          <div class="text-xs font-bold text-stone-500 mb-2 text-center">{{ i18n.currentLang() === 'he' ? 'נתפסו' : 'Captured' }}</div>
+          <!-- White captured pieces -->
+          <div class="flex flex-col gap-1 items-center mb-4">
+            @for (p of getCaptured('w'); track $index) {
+              <span class="text-2xl text-stone-400 transition-all duration-300 hover:scale-110" 
+                    style="animation: slideIn 0.3s ease-out;">
+                {{ getPieceSymbol(p) }}
+              </span>
+            }
+          </div>
+          <div class="border-t border-stone-200 my-2"></div>
+          <!-- Black captured pieces -->
+          <div class="flex flex-col gap-1 items-center">
+            @for (p of getCaptured('b'); track $index) {
+              <span class="text-2xl text-stone-800 transition-all duration-300 hover:scale-110"
+                    style="animation: slideIn 0.3s ease-out;">
+                {{ getPieceSymbol(p) }}
+              </span>
+            }
+          </div>
+        </div>
       </div>
     </div>
     
@@ -156,12 +173,12 @@
           
           @if (!editingGameName()) {
             <div class="flex items-center gap-2">
-              <p class="text-sm text-stone-600 flex-1">
+              <p class="text-sm text-stone-600 flex-1 truncate" [title]="history.currentGame()?.gameName || (i18n.currentLang() === 'he' ? 'ללא שם' : 'Unnamed')">
                 {{ history.currentGame()?.gameName || (i18n.currentLang() === 'he' ? 'ללא שם' : 'Unnamed') }}
               </p>
               <button 
                 (click)="startEditingGameName()"
-                class="px-2 py-1 text-xs bg-stone-100 hover:bg-stone-200 rounded transition-colors">
+                class="px-2 py-1 text-xs bg-stone-100 hover:bg-stone-200 rounded transition-colors flex-shrink-0">
                 {{ i18n.t().editName }}
               </button>
             </div>
@@ -172,6 +189,7 @@
                 [(ngModel)]="tempGameName"
                 class="px-2 py-1 text-sm border border-stone-300 rounded focus:outline-none focus:border-amber-500"
                 placeholder="{{ i18n.t().gameName }}"
+                maxlength="50"
                 (keyup.enter)="saveGameName()"
                 (keyup.escape)="cancelEditGameName()" />
               <div class="flex gap-2">
@@ -284,3 +302,16 @@
     </div>
   </div>
 </main>
+
+<style>
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+</style>

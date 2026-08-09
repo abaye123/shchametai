@@ -74,6 +74,48 @@ export interface Translations {
   editApiKey: string;
   deleteApiKey: string;
   apiKeyInfo: string;
+  // Engine strength ladder
+  level: string;
+  estimatedRating: string;
+  levelBeginner: string;
+  levelCasual: string;
+  levelImprover: string;
+  levelClub: string;
+  levelStrong: string;
+  levelExpert: string;
+  // Promotion
+  promotionTitle: string;
+  queen: string;
+  rook: string;
+  bishop: string;
+  knight: string;
+  // Draw reasons
+  draw: string;
+  drawFiftyMove: string;
+  drawThreefold: string;
+  drawInsufficientMaterial: string;
+  // Search feedback
+  searchDepth: string;
+  evaluation: string;
+  bookMove: string;
+  // Move review
+  reviewGame: string;
+  reviewing: string;
+  reviewCancel: string;
+  reviewAgain: string;
+  accuracy: string;
+  avgLoss: string;
+  bestMoveWas: string;
+  qBrilliant: string;
+  qGreat: string;
+  qBest: string;
+  qExcellent: string;
+  qGood: string;
+  qBook: string;
+  qForced: string;
+  qInaccuracy: string;
+  qMistake: string;
+  qBlunder: string;
 }
 
 const DICTIONARY: Record<Language, Translations> = {
@@ -147,7 +189,45 @@ const DICTIONARY: Record<Language, Translations> = {
     saveApiKey: 'שמור מפתח',
     editApiKey: 'ערוך מפתח',
     deleteApiKey: 'מחק מפתח',
-    apiKeyInfo: 'מפתח API נדרש לתכונת AI Coach'
+    apiKeyInfo: 'מפתח API נדרש לתכונת AI Coach',
+    level: 'רמה',
+    estimatedRating: 'דירוג',
+    levelBeginner: 'מתחיל',
+    levelCasual: 'חובב',
+    levelImprover: 'מתקדם',
+    levelClub: 'מועדון',
+    levelStrong: 'חזק',
+    levelExpert: 'מומחה',
+    promotionTitle: 'בחר כלי',
+    queen: 'מלכה',
+    rook: 'צריח',
+    bishop: 'רץ',
+    knight: 'סוס',
+    draw: 'תיקו',
+    drawFiftyMove: 'תיקו - חוק 50 המהלכים',
+    drawThreefold: 'תיקו - חזרה משולשת',
+    drawInsufficientMaterial: 'תיקו - חומר בלתי מספיק',
+    searchDepth: 'עומק',
+    evaluation: 'הערכה',
+    bookMove: 'מהלך מספר הפתיחות',
+    // Move review
+    reviewGame: 'נתח משחק',
+    reviewing: 'מנתח',
+    reviewCancel: 'עצור ניתוח',
+    reviewAgain: 'נתח מחדש',
+    accuracy: 'דיוק',
+    avgLoss: 'הפסד ממוצע',
+    bestMoveWas: 'המהלך הטוב היה',
+    qBrilliant: 'מבריק',
+    qGreat: 'מצוין מאוד',
+    qBest: 'הטוב ביותר',
+    qExcellent: 'מצוין',
+    qGood: 'טוב',
+    qBook: 'ספר פתיחות',
+    qForced: 'מאולץ',
+    qInaccuracy: 'אי-דיוק',
+    qMistake: 'טעות',
+    qBlunder: 'טעות גסה'
   },
   en: {
     title: 'ShchametAI',
@@ -219,7 +299,45 @@ const DICTIONARY: Record<Language, Translations> = {
     saveApiKey: 'Save Key',
     editApiKey: 'Edit Key',
     deleteApiKey: 'Delete Key',
-    apiKeyInfo: 'API Key required for AI Coach feature'
+    apiKeyInfo: 'API Key required for AI Coach feature',
+    level: 'Level',
+    estimatedRating: 'Rating',
+    levelBeginner: 'Beginner',
+    levelCasual: 'Casual',
+    levelImprover: 'Improver',
+    levelClub: 'Club',
+    levelStrong: 'Strong',
+    levelExpert: 'Expert',
+    promotionTitle: 'Choose a piece',
+    queen: 'Queen',
+    rook: 'Rook',
+    bishop: 'Bishop',
+    knight: 'Knight',
+    draw: 'Draw',
+    drawFiftyMove: 'Draw - fifty-move rule',
+    drawThreefold: 'Draw - threefold repetition',
+    drawInsufficientMaterial: 'Draw - insufficient material',
+    searchDepth: 'Depth',
+    evaluation: 'Evaluation',
+    bookMove: 'Book move',
+    // Move review
+    reviewGame: 'Review game',
+    reviewing: 'Reviewing',
+    reviewCancel: 'Stop review',
+    reviewAgain: 'Review again',
+    accuracy: 'Accuracy',
+    avgLoss: 'Avg. loss',
+    bestMoveWas: 'Best was',
+    qBrilliant: 'Brilliant',
+    qGreat: 'Great',
+    qBest: 'Best',
+    qExcellent: 'Excellent',
+    qGood: 'Good',
+    qBook: 'Book',
+    qForced: 'Forced',
+    qInaccuracy: 'Inaccuracy',
+    qMistake: 'Mistake',
+    qBlunder: 'Blunder'
   }
 };
 

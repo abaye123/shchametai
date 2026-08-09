@@ -2,6 +2,7 @@ import { Component, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { I18nService } from '../services/i18n.service';
 import { GameHistoryService } from '../services/game-history.service';
+import { Difficulty, LevelId, LEVELS, LEGACY_DIFFICULTY_TO_LEVEL } from '../models/app.types';
 
 @Component({
   selector: 'app-history-screen',
@@ -15,9 +16,9 @@ import { GameHistoryService } from '../services/game-history.service';
       <main class="mx-auto w-full max-w-3xl px-4 py-5 sm:py-6">
 
         <!-- Header card -->
-        <div class="card card-pad rounded-4xl mb-4 animate-slide-up">
+        <div class="card card-pad mb-3 animate-slide-up">
           <div class="flex items-center justify-between gap-3 mb-4">
-            <h2 class="text-xl sm:text-2xl font-bold text-sand-900">{{ i18n.t().savedGames }}</h2>
+            <h2 class="text-xl sm:text-2xl font-bold text-sand-900 tracking-tight">{{ i18n.t().savedGames }}</h2>
             <button (click)="onBack()" class="btn-soft btn-sm flex-none">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="size-4 rtl:rotate-180">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
@@ -59,22 +60,22 @@ import { GameHistoryService } from '../services/game-history.service';
 
         <!-- Games -->
         @if (history.savedGames().length === 0) {
-          <div class="card card-pad rounded-4xl text-center py-16 animate-slide-up">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.2" stroke="currentColor" class="size-16 mx-auto mb-4 text-sand-300">
+          <div class="card card-pad text-center py-16 animate-slide-up">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.2" stroke="currentColor" class="size-12 mx-auto mb-4 text-sand-300">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" />
             </svg>
-            <p class="text-lg text-sand-500">{{ i18n.t().noSavedGames }}</p>
+            <p class="text-sm uppercase tracking-label text-sand-500">{{ i18n.t().noSavedGames }}</p>
           </div>
         } @else {
-          <div class="flex flex-col gap-3">
+          <div class="flex flex-col gap-2">
             @for (game of history.savedGames(); track game.id) {
-              <div class="card rounded-4xl p-4 sm:p-5 transition-shadow duration-200 hover:shadow-lift animate-slide-up">
+              <div class="card p-4 sm:p-5 transition-colors duration-150 hover:border-sand-300 animate-slide-up">
                 <div class="flex flex-col sm:flex-row items-start gap-4">
 
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 mb-2 flex-wrap">
                       @if (game.isFavorite) {
-                        <span class="text-honey-400 text-lg leading-none">★</span>
+                        <span class="text-honey-500 text-base leading-none">★</span>
                       }
                       @if (game.gameName) {
                         <span class="font-bold text-base text-sand-900 truncate max-w-[16rem]" [title]="game.gameName">
@@ -87,7 +88,7 @@ import { GameHistoryService } from '../services/game-history.service';
                         <span class="text-sand-400 font-normal mx-0.5">{{ i18n.currentLang() === 'he' ? 'נגד' : 'vs' }}</span>
                         {{ game.playerBlack }}
                       </span>
-                      <span class="chip"
+                      <span class="chip uppercase tracking-label"
                             [class.bg-green-100]="game.result === 'white'"
                             [class.text-green-800]="game.result === 'white'"
                             [class.bg-sand-800]="game.result === 'black'"
@@ -106,13 +107,7 @@ import { GameHistoryService } from '../services/game-history.service';
                       <span class="flex items-center gap-1.5">
                         {{ game.gameMode === 'computer' ? i18n.t().vsComputer : i18n.t().vsHuman }}
                         @if (game.gameMode === 'computer' && game.difficulty) {
-                          <span class="chip !py-0.5"
-                                [class.bg-green-100]="game.difficulty === 'easy'"
-                                [class.text-green-700]="game.difficulty === 'easy'"
-                                [class.bg-honey-100]="game.difficulty === 'medium'"
-                                [class.text-honey-800]="game.difficulty === 'medium'"
-                                [class.bg-rose-100]="game.difficulty === 'hard'"
-                                [class.text-rose-700]="game.difficulty === 'hard'">
+                          <span class="chip !py-0.5" [ngClass]="getDifficultyChipClass(game.difficulty)">
                             {{ getDifficultyText(game.difficulty) }}
                           </span>
                         }
@@ -130,7 +125,7 @@ import { GameHistoryService } from '../services/game-history.service';
                     <button (click)="onExportSingleGame(game.id)" class="btn-soft btn-sm sm:w-full">
                       {{ i18n.t().exportSingle }}
                     </button>
-                    <button (click)="onDeleteGame(game.id)" class="btn-soft btn-sm sm:w-full !text-rose-600">
+                    <button (click)="onDeleteGame(game.id)" class="btn-soft btn-sm sm:w-full !text-rose-700">
                       {{ i18n.t().deleteGame }}
                     </button>
                   </div>
@@ -214,13 +209,43 @@ export class HistoryScreenComponent {
     }
   }
 
-  getDifficultyText(difficulty: string): string {
-    const lang = this.i18n.currentLang();
-    switch (difficulty) {
-      case 'easy': return lang === 'he' ? 'קל' : 'Easy';
-      case 'medium': return lang === 'he' ? 'בינוני' : 'Medium';
-      case 'hard': return lang === 'he' ? 'קשה' : 'Hard';
-      default: return difficulty;
+  /**
+   * Saved games may store either a legacy difficulty string
+   * ('easy' | 'medium' | 'hard') or a numeric level id 1-6, so both are
+   * accepted here and rendered with the current level vocabulary.
+   */
+  getDifficultyText(difficulty: string | number | undefined | null): string {
+    if (difficulty === undefined || difficulty === null || difficulty === '') return '';
+
+    const level = this.toLevelId(difficulty);
+    if (level !== null) {
+      const meta = LEVELS.find(l => l.id === level)!;
+      return `${this.i18n.t().level} ${level} - ${this.i18n.t()[meta.nameKey]}`;
     }
+
+    // Unknown value - show it verbatim rather than swallowing it.
+    return String(difficulty);
+  }
+
+  getDifficultyChipClass(difficulty: string | number | undefined | null): string {
+    const level = this.toLevelId(difficulty);
+    if (level === null) return 'bg-sand-100 text-sand-700';
+    if (level <= 2) return 'bg-green-100 text-green-700';
+    if (level <= 4) return 'bg-honey-100 text-honey-800';
+    return 'bg-rose-100 text-rose-700';
+  }
+
+  /** Normalises a legacy difficulty string or a numeric level onto LevelId. */
+  private toLevelId(value: string | number | undefined | null): LevelId | null {
+    if (value === undefined || value === null) return null;
+
+    if (typeof value === 'string' && value in LEGACY_DIFFICULTY_TO_LEVEL) {
+      return LEGACY_DIFFICULTY_TO_LEVEL[value as Difficulty];
+    }
+
+    const n = typeof value === 'number' ? value : Number(value);
+    if (Number.isInteger(n) && n >= 1 && n <= 6) return n as LevelId;
+
+    return null;
   }
 }

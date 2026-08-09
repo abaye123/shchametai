@@ -1,173 +1,150 @@
-import { Injectable, inject } from '@angular/core';
-import { ChessEngineService, Color, Piece, Position, Move } from './chess-engine.service';
+import { Injectable, signal } from '@angular/core';
+import { getLevel } from '../engine/levels.ts';
+import { runSearch } from '../engine/search-entry.ts';
+import { STARTING_FEN, type LevelId } from '../engine/types.ts';
+import type { EngineResponse, SearchRequest } from '../engine/worker-protocol.ts';
 
+export interface EngineMoveResult {
+  /** UCI move, or '' when the position is terminal. */
+  uci: string;
+  score: number;
+  depth: number;
+  nodes: number;
+  timeMs: number;
+  fromBook: boolean;
+}
+
+/**
+ * Talks to the search engine.
+ *
+ * The search is a synchronous loop that can hold a core for several seconds at
+ * the top levels, so it runs in a Web Worker and the UI stays at 60fps while it
+ * thinks. If Worker construction fails - an unusual browser, a restrictive
+ * Tauri webview, a bundler that did not emit the chunk - the service silently
+ * falls back to running the identical search function on the main thread. The
+ * game stays playable either way; only smoothness differs.
+ */
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class ComputerOpponentService {
-  private chess = inject(ChessEngineService);
+  private worker: Worker | null = null;
+  private workerFailed = false;
+  private nextRequestId = 1;
 
-  // Piece values for evaluation
-  private readonly PIECE_VALUES: Record<string, number> = {
-    'p': 10,
-    'n': 30,
-    'b': 30,
-    'r': 50,
-    'q': 90,
-    'k': 900
-  };
+  /** Live search telemetry, for the "thinking" readout in the UI. */
+  lastDepth = signal<number>(0);
+  lastScore = signal<number>(0);
+  lastNodes = signal<number>(0);
+  lastFromBook = signal<boolean>(false);
+  usingWorker = signal<boolean>(false);
 
   /**
-   * Calculates the best move for the given color and difficulty.
-   * Returns a promise to allow the UI to update before processing (avoid freeze).
+   * Picks a move for the given position.
+   *
+   * @param history UCI moves played from the starting position. Passing the
+   *   move list rather than a FEN is what lets the engine see repetitions and
+   *   probe the opening book.
    */
-  async getBestMove(color: Color, difficulty: 'easy' | 'medium' | 'hard'): Promise<{from: Position, to: Position} | null> {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const board = this.chess.board();
-        
-        // Easy: Random move
-        if (difficulty === 'easy') {
-          resolve(this.getRandomMove(board, color));
-          return;
-        }
+  async getBestMove(
+    history: string[],
+    level: LevelId,
+    seed?: number,
+  ): Promise<EngineMoveResult> {
+    const request: SearchRequest = {
+      type: 'search',
+      id: this.nextRequestId++,
+      startFen: STARTING_FEN,
+      history,
+      level,
+      seed,
+    };
 
-        // Medium/Hard: Minimax
-        // Medium = depth 2, Hard = depth 3 (depth 4 is significantly slower in JS without heavy optimization)
-        const depth = difficulty === 'medium' ? 2 : 3;
-        const bestMove = this.minimaxRoot(board, depth, true, color);
-        resolve(bestMove);
-      }, 100);
+    let response: EngineResponse;
+    try {
+      response = await this.ask(request);
+    } catch {
+      // Worker died mid-search. Fall back for this move and every later one.
+      this.disposeWorker();
+      this.workerFailed = true;
+      response = runSearch(request);
+    }
+
+    if (response.type !== 'result') {
+      if (response.type === 'error') console.error('Engine error:', response.message);
+      return { uci: '', score: 0, depth: 0, nodes: 0, timeMs: 0, fromBook: false };
+    }
+
+    this.lastDepth.set(response.depth);
+    this.lastScore.set(response.score);
+    this.lastNodes.set(response.nodes);
+    this.lastFromBook.set(response.fromBook);
+
+    return {
+      uci: response.uci,
+      score: response.score,
+      depth: response.depth,
+      nodes: response.nodes,
+      timeMs: response.timeMs,
+      fromBook: response.fromBook,
+    };
+  }
+
+  /** How long this level is allowed to think, for the UI's minimum delay. */
+  budgetMsFor(level: LevelId): number {
+    return getLevel(level).limits.timeBudgetMs;
+  }
+
+  private ask(request: SearchRequest): Promise<EngineResponse> {
+    const worker = this.ensureWorker();
+    if (!worker) {
+      // No worker available - run the same code synchronously.
+      return Promise.resolve(runSearch(request));
+    }
+
+    return new Promise<EngineResponse>((resolve, reject) => {
+      const onMessage = (ev: MessageEvent<EngineResponse>) => {
+        if (ev.data?.id !== request.id) return; // a stale reply
+        cleanup();
+        resolve(ev.data);
+      };
+      const onError = (ev: ErrorEvent) => {
+        cleanup();
+        reject(new Error(ev.message || 'worker error'));
+      };
+      const cleanup = () => {
+        worker.removeEventListener('message', onMessage as EventListener);
+        worker.removeEventListener('error', onError as EventListener);
+      };
+
+      worker.addEventListener('message', onMessage as EventListener);
+      worker.addEventListener('error', onError as EventListener);
+      worker.postMessage(request);
     });
   }
 
-  private getRandomMove(board: (Piece | null)[][], color: Color): {from: Position, to: Position} | null {
-    const allMoves = this.getAllValidMoves(board, color);
-    if (allMoves.length === 0) return null;
-    const randomIdx = Math.floor(Math.random() * allMoves.length);
-    return allMoves[randomIdx];
-  }
+  private ensureWorker(): Worker | null {
+    if (this.worker) return this.worker;
+    if (this.workerFailed || typeof Worker === 'undefined') return null;
 
-  private minimaxRoot(
-    board: (Piece | null)[][], 
-    depth: number, 
-    isMaximizing: boolean,
-    playerColor: Color
-  ): {from: Position, to: Position} | null {
-    
-    const allMoves = this.getAllValidMoves(board, playerColor);
-    if (allMoves.length === 0) return null;
-
-    let bestMove = null;
-    let bestValue = -Infinity;
-    let alpha = -Infinity;
-    let beta = Infinity;
-
-    // Randomize order slightly to vary play
-    allMoves.sort(() => Math.random() - 0.5);
-
-    for (const move of allMoves) {
-      const newBoard = this.simulateMove(board, move);
-      const value = this.minimax(newBoard, depth - 1, alpha, beta, false, playerColor);
-      
-      if (value > bestValue) {
-        bestValue = value;
-        bestMove = move;
-      }
-      alpha = Math.max(alpha, bestValue);
-    }
-
-    return bestMove;
-  }
-
-  private minimax(
-    board: (Piece | null)[][], 
-    depth: number, 
-    alpha: number, 
-    beta: number, 
-    isMaximizing: boolean,
-    playerColor: Color
-  ): number {
-    
-    if (depth === 0) {
-      return this.evaluateBoard(board, playerColor);
-    }
-
-    const currentColor = isMaximizing ? playerColor : (playerColor === 'w' ? 'b' : 'w');
-    const allMoves = this.getAllValidMoves(board, currentColor);
-
-    if (allMoves.length === 0) {
-      // Checkmate or Stalemate check could go here, for now return eval
-      return this.evaluateBoard(board, playerColor);
-    }
-
-    if (isMaximizing) {
-      let maxEval = -Infinity;
-      for (const move of allMoves) {
-        const newBoard = this.simulateMove(board, move);
-        const evalVal = this.minimax(newBoard, depth - 1, alpha, beta, false, playerColor);
-        maxEval = Math.max(maxEval, evalVal);
-        alpha = Math.max(alpha, evalVal);
-        if (beta <= alpha) break;
-      }
-      return maxEval;
-    } else {
-      let minEval = Infinity;
-      for (const move of allMoves) {
-        const newBoard = this.simulateMove(board, move);
-        const evalVal = this.minimax(newBoard, depth - 1, alpha, beta, true, playerColor);
-        minEval = Math.min(minEval, evalVal);
-        beta = Math.min(beta, evalVal);
-        if (beta <= alpha) break;
-      }
-      return minEval;
+    try {
+      this.worker = new Worker(
+        new URL('../engine/engine.worker', import.meta.url),
+        { type: 'module' },
+      );
+      this.usingWorker.set(true);
+      return this.worker;
+    } catch (e) {
+      console.warn('Engine worker unavailable, searching on the main thread.', e);
+      this.workerFailed = true;
+      this.usingWorker.set(false);
+      return null;
     }
   }
 
-  private evaluateBoard(board: (Piece | null)[][], playerColor: Color): number {
-    let score = 0;
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const piece = board[r][c];
-        if (piece) {
-          const value = this.PIECE_VALUES[piece.type] || 0;
-          // Position bonus logic could be added here
-          const pieceValue = piece.color === playerColor ? value : -value;
-          score += pieceValue;
-        }
-      }
-    }
-    return score;
-  }
-
-  // --- Helpers to avoid modifying the main game service state directly during simulation ---
-
-  private getAllValidMoves(board: (Piece | null)[][], color: Color): {from: Position, to: Position}[] {
-    const moves: {from: Position, to: Position}[] = [];
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const piece = board[r][c];
-        if (piece && piece.color === color) {
-          // Using the existing engine helper but we need to be careful not to rely on its internal state
-          // The engine's getValidMoves expects the board it is passed.
-          const pieceMoves = this.chess.getValidMoves({row: r, col: c}, board, true);
-          pieceMoves.forEach(to => moves.push({ from: {row: r, col: c}, to }));
-        }
-      }
-    }
-    return moves;
-  }
-
-  private simulateMove(board: (Piece | null)[][], move: {from: Position, to: Position}): (Piece | null)[][] {
-    const newBoard = board.map(row => row.slice());
-    const piece = newBoard[move.from.row][move.from.col]!;
-    newBoard[move.to.row][move.to.col] = piece;
-    newBoard[move.from.row][move.from.col] = null;
-    
-    // Simple promotion for AI simulation
-    if (piece.type === 'p' && (move.to.row === 0 || move.to.row === 7)) {
-       newBoard[move.to.row][move.to.col] = { type: 'q', color: piece.color };
-    }
-    return newBoard;
+  private disposeWorker() {
+    this.worker?.terminate();
+    this.worker = null;
+    this.usingWorker.set(false);
   }
 }

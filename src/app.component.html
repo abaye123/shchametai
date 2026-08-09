@@ -4,9 +4,9 @@
 
   <!-- Header -->
   <header class="flex-none px-3 pt-3 sm:px-4 sm:pt-4">
-    <div class="mx-auto w-full max-w-[1600px] rounded-4xl shadow-lift border border-white/15
+    <div class="mx-auto w-full max-w-[1600px] rounded-3xl border border-black/10
                 px-3 py-2 sm:px-5 sm:py-3 flex items-center justify-between gap-3
-                bg-gradient-to-br from-honey-700 via-honey-800 to-sand-900 text-honey-50">
+                bg-sand-800 text-sand-50">
 
       <div class="flex items-center gap-3 min-w-0">
         <div class="grid place-items-center w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white/15
@@ -17,7 +17,7 @@
           <h1 class="text-lg sm:text-xl font-bold tracking-wide truncate leading-tight">
             {{ i18n.t().title }}
           </h1>
-          <p class="hidden sm:block text-[11px] text-honey-200/80 leading-tight">
+          <p class="hidden sm:block text-[11px] text-sand-300 leading-tight">
             {{ i18n.currentLang() === 'he' ? 'שחמט חכם, גם בלי אינטרנט' : 'Smart chess, even offline' }}
           </p>
         </div>
@@ -66,7 +66,7 @@
       <app-settings-screen
         class="block h-full"
         [gameMode]="gameMode()"
-        [difficulty]="difficulty()"
+        [level]="level()"
         [apiKey]="apiKey()"
         (applySettings)="applySettings($event)"
         (startNewGame)="startNewGame($event)"
@@ -80,7 +80,7 @@
       <app-game-screen
         class="block h-full"
         [gameMode]="gameMode()"
-        [difficulty]="difficulty()"
+        [level]="level()"
         [apiKey]="apiKey()"
         [playerColor]="playerColor()"
         (backToMenu)="goToWelcome()"

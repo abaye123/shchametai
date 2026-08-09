@@ -31,22 +31,41 @@
 
 /* ---------------------------------------------------------------
    Design tokens
+
+   The look: printed board on paper, in a wooden tray. Warm neutrals
+   carry the interface, one brass accent carries the actions, and a
+   cool slate handles purely informational states. Surfaces are opaque
+   and separated by hairlines rather than blur and glow.
    --------------------------------------------------------------- */
 @layer base {
   :root {
-    --radius-card: 1.75rem;
-    --radius-control: 1rem;
-    --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
-    --ease-bounce: cubic-bezier(0.34, 1.4, 0.64, 1);
+    /* Radii - a ladder, not one size */
+    --radius-control: 0.75rem;
+    --radius-panel: 1rem;
+    --radius-card: 1.25rem;
 
-    /* Board colours */
-    --sq-light: #f3e2c3;
-    --sq-light-2: #ecd6b0;
-    --sq-dark: #a9784f;
-    --sq-dark-2: #97673f;
-    --sq-select: #ffd257;
-    --sq-last: #d9e8a4;
-    --sq-danger: #f79a8f;
+    /* Motion - short and settled, no overshoot */
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-soft: cubic-bezier(0.2, 0, 0, 1);
+    --dur-fast: 0.12s;
+    --dur-base: 0.18s;
+
+    /* Board - a buff and walnut printed board */
+    --sq-light: #e9dcc0;
+    --sq-dark: #8d6d4c;
+    --frame-1: #b58f66;
+    --frame-2: #8a6644;
+    --frame-3: #66492f;
+
+    /* Board state washes, laid over the squares so the checker
+       pattern still reads underneath a highlight. */
+    --sq-select: rgba(196, 154, 79, 0.62);
+    --sq-last: rgba(196, 154, 79, 0.34);
+    --sq-danger: rgba(169, 79, 67, 0.62);
+
+    /* Move markers */
+    --marker-quiet: rgba(36, 31, 26, 0.30);
+    --marker-capture: rgba(169, 79, 67, 0.55);
   }
 
   * {
@@ -63,11 +82,13 @@
   body {
     font-family: 'Rubik', 'Arial', sans-serif;
     color: theme('colors.sand.900');
-    background: radial-gradient(120% 90% at 12% 0%, #fff8ec 0%, #f8f1e4 42%, #f1e7d6 100%);
-    background-attachment: fixed;
+    /* Flat paper. No page-wide gradient. */
+    background-color: #f3efe6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
-  /* Rounded, unobtrusive scrollbars */
+  /* Quiet scrollbars */
   * {
     scrollbar-width: thin;
     scrollbar-color: theme('colors.sand.300') transparent;
@@ -95,7 +116,7 @@
 
   :focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px theme('colors.honey.300');
+    box-shadow: theme('boxShadow.glow-honey');
     border-radius: inherit;
   }
 }
@@ -104,25 +125,33 @@
    Components
    --------------------------------------------------------------- */
 @layer components {
-  /* --- Surfaces --- */
+  /* --- Surfaces -------------------------------------------------
+     Opaque paper on paper. A hairline does the separating; the
+     shadow only hints that the card is the nearer sheet. */
   .card {
-    @apply bg-white/85 rounded-4xl shadow-soft border border-white/70 backdrop-blur-sm;
+    @apply bg-white rounded-4xl border border-sand-200 shadow-soft;
   }
 
   .card-flat {
-    @apply bg-white/70 rounded-3xl border border-sand-200/70;
+    @apply bg-sand-50 rounded-3xl border border-sand-200;
   }
 
   .card-pad {
     @apply p-5 sm:p-6;
   }
 
-  /* --- Buttons --- */
+  /* --- Buttons --------------------------------------------------
+     Flat, solid colour. Weight and contrast carry the hierarchy,
+     not gradients or glow. Radius scales with the control. */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5
-           font-semibold text-sm leading-none select-none
-           transition-all duration-200 ease-out
-           active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none;
+           font-semibold text-sm leading-none select-none border border-transparent
+           transition-colors duration-150 ease-out
+           disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  .btn:active {
+    transform: translateY(1px);
   }
 
   .btn-lg {
@@ -130,56 +159,47 @@
   }
 
   .btn-sm {
-    @apply rounded-xl px-3 py-2 text-xs;
+    @apply rounded-xl px-3 py-2 text-xs gap-1.5;
   }
 
   .btn-primary {
-    @apply btn text-white shadow-lift;
-    background-image: linear-gradient(140deg, theme('colors.honey.400'), theme('colors.honey.600'));
+    @apply btn bg-honey-600 text-white;
   }
 
   .btn-primary:hover {
-    background-image: linear-gradient(140deg, theme('colors.honey.300'), theme('colors.honey.500'));
-    transform: translateY(-1px);
+    @apply bg-honey-700;
   }
 
   .btn-accent {
-    @apply btn text-white shadow-lift;
-    background-image: linear-gradient(140deg, theme('colors.orchid.400'), theme('colors.orchid.600'));
+    @apply btn bg-orchid-600 text-white;
   }
 
   .btn-accent:hover {
-    background-image: linear-gradient(140deg, theme('colors.orchid.300'), theme('colors.orchid.500'));
-    transform: translateY(-1px);
+    @apply bg-orchid-700;
   }
 
   .btn-success {
-    @apply btn text-white shadow-lift;
-    background-image: linear-gradient(140deg, #4ade80, #15803d);
+    @apply btn bg-green-600 text-white;
   }
 
   .btn-success:hover {
-    background-image: linear-gradient(140deg, #6ee7a0, #16a34a);
-    transform: translateY(-1px);
+    @apply bg-green-700;
   }
 
   .btn-danger {
-    @apply btn text-white shadow-lift;
-    background-image: linear-gradient(140deg, #fb7185, #be123c);
+    @apply btn bg-rose-600 text-white;
   }
 
   .btn-danger:hover {
-    background-image: linear-gradient(140deg, #fda4af, #e11d48);
-    transform: translateY(-1px);
+    @apply bg-rose-700;
   }
 
   .btn-soft {
-    @apply btn bg-white/80 text-sand-800 border border-sand-200 shadow-soft;
+    @apply btn bg-white text-sand-800 border-sand-300;
   }
 
   .btn-soft:hover {
-    @apply bg-white border-sand-300 shadow-lift;
-    transform: translateY(-1px);
+    @apply bg-sand-50 border-sand-400;
   }
 
   .btn-ghost {
@@ -187,30 +207,32 @@
   }
 
   .btn-ghost:hover {
-    @apply bg-sand-900/5;
+    @apply bg-sand-100;
   }
 
+  /* Sits on the dark header and the dark replay bar. A tint of the
+     bar it lives on, not a blurred pane of glass. */
   .btn-glass {
-    @apply btn bg-white/15 text-white border border-white/25 backdrop-blur-sm;
+    @apply btn bg-white/10 text-white border-white/20;
   }
 
   .btn-glass:hover {
-    @apply bg-white/25;
+    @apply bg-white/20 border-white/30;
   }
 
-  /* --- Segmented control (pill group) --- */
+  /* --- Segmented control --- */
   .segment {
-    @apply flex gap-1.5 p-1.5 rounded-3xl bg-sand-100/80 border border-sand-200/70;
+    @apply flex gap-1 p-1 rounded-3xl bg-sand-100 border border-sand-200;
   }
 
   .segment-item {
     @apply flex-1 rounded-2xl px-3 py-2.5 text-sm font-semibold text-sand-600
-           transition-all duration-200 ease-out active:scale-[0.97]
+           transition-colors duration-150 ease-out
            flex items-center justify-center gap-2;
   }
 
   .segment-item:hover {
-    @apply bg-white/70 text-sand-800;
+    @apply text-sand-900;
   }
 
   .segment-item.is-active {
@@ -219,22 +241,31 @@
 
   /* --- Form controls --- */
   .field {
-    @apply w-full rounded-2xl border border-sand-200 bg-white/90 px-4 py-3 text-sm
-           placeholder:text-sand-400 transition-all duration-200;
+    @apply w-full rounded-2xl border border-sand-300 bg-white px-3.5 py-2.5 text-sm
+           placeholder:text-sand-400 transition-colors duration-150;
   }
 
   .field:focus {
-    @apply outline-none border-honey-300 bg-white;
+    @apply outline-none border-honey-400;
     box-shadow: theme('boxShadow.glow-honey');
   }
 
-  /* --- Chips / badges --- */
+  /* --- Chips / badges ---
+     Small radius on purpose: a chip is a stamp, not a pill. */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold;
+    @apply inline-flex items-center gap-1.5 rounded-md px-2 py-1
+           text-[11px] font-semibold leading-none tracking-wide;
   }
 
   .section-title {
     @apply flex items-center gap-2 font-bold text-sand-800;
+  }
+
+  /* Small caps label above a group of controls. Letter-spacing is
+     doing the work that colour and shadow used to do. */
+  .label-cap {
+    @apply block text-[11px] font-bold uppercase text-sand-500
+           tracking-label mb-2 px-0.5;
   }
 
   /* --- Layout helpers --- */
@@ -242,6 +273,114 @@
     @apply h-full overflow-y-auto overflow-x-hidden;
   }
 }
+
+/* ---------------------------------------------------------------
+   Level ladder
+   Shared by the welcome and settings screens, so it lives here once
+   rather than being copied into both components. Reads like a row of
+   printed cards: flat, hairline edge, brass edge when chosen.
+   --------------------------------------------------------------- */
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+@media (min-width: 26rem) {
+  .level-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.level-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid theme('colors.sand.200');
+  background: #fff;
+  /* logical, so the ladder mirrors correctly in Hebrew */
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 0.14s ease-out, border-color 0.14s ease-out;
+}
+
+.level-card:hover {
+  background: theme('colors.sand.50');
+  border-color: theme('colors.sand.300');
+}
+
+.level-card:active { transform: translateY(1px); }
+
+.level-card.is-active {
+  border-color: theme('colors.honey.500');
+  background: theme('colors.honey.50');
+  box-shadow: inset 0 0 0 1px theme('colors.honey.500');
+}
+
+.level-card:focus-visible {
+  outline: none;
+  box-shadow: theme('boxShadow.glow-honey');
+}
+
+.level-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.level-badge {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  background: theme('colors.sand.100');
+  color: theme('colors.sand.500');
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.level-card.is-active .level-badge {
+  background: theme('colors.honey.600');
+  color: #fff;
+}
+
+.level-name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: theme('colors.sand.900');
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.level-elo {
+  background: theme('colors.sand.100');
+  color: theme('colors.sand.600');
+  font-variant-numeric: tabular-nums;
+}
+
+.level-card.is-active .level-elo {
+  background: theme('colors.honey.100');
+  color: theme('colors.honey.800');
+}
+
+.level-dots { display: flex; align-items: center; gap: 3px; }
+
+.level-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: theme('colors.sand.200');
+}
+
+.level-dot.is-on { background: theme('colors.sand.400'); }
+.level-card.is-active .level-dot.is-on { background: theme('colors.honey.500'); }
 
 /* ---------------------------------------------------------------
    Chess board

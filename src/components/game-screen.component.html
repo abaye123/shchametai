@@ -2,8 +2,7 @@
 
   <!-- ============ Replay Mode Banner ============ -->
   @if (history.isReplayMode()) {
-    <div class="flex-none rounded-4xl px-4 py-3 text-white shadow-lift animate-slide-up
-                bg-gradient-to-br from-orchid-500 via-orchid-600 to-orchid-800">
+    <div class="flex-none rounded-3xl px-4 py-3 text-white animate-slide-up bg-orchid-700">
       <div class="flex flex-wrap items-center gap-3">
         <div class="flex items-center gap-2 font-bold">
           <span class="grid place-items-center w-8 h-8 rounded-2xl bg-white/20 border border-white/25">
@@ -57,6 +56,18 @@
             <span class="chip bg-orchid-100 text-orchid-700 border border-orchid-200 animate-breathe">
               {{ i18n.t().aiThinking }}
             </span>
+          } @else if (gameMode() === 'computer' && chess.history().length > 0) {
+            @if (engineFromBook()) {
+              <span class="chip bg-sand-100 text-sand-600 border border-sand-200">
+                {{ i18n.t().bookMove }}
+              </span>
+            } @else if (engineDepth() > 0) {
+              <span class="chip bg-sand-100 text-sand-600 border border-sand-200"
+                    [title]="i18n.t().evaluation">
+                {{ i18n.t().searchDepth }} {{ engineDepth() }}
+                <span class="font-mono">{{ engineEvalText() }}</span>
+              </span>
+            }
           }
         </div>
 
@@ -111,10 +122,19 @@
           [class.pointer-events-none]="isComputerMoving() || history.isReplayMode()">
         </app-board>
 
+        <!-- Promotion picker, shown over the board -->
+        @if (chess.pendingPromotion(); as promo) {
+          <app-promotion-dialog
+            [color]="promo.color"
+            (choose)="onPromotionChosen($event)"
+            (cancel)="onPromotionCancelled()">
+          </app-promotion-dialog>
+        }
+
         <!-- Game over overlay (does not push the layout around) -->
-        @if ((chess.isCheckmate() || chess.isStalemate()) && showGameOver()) {
+        @if (chess.isGameOver() && showGameOver()) {
           <div class="absolute inset-0 z-20 grid place-items-center rounded-4xl
-                      bg-sand-900/45 backdrop-blur-[3px] p-4 animate-pop-in">
+                      bg-sand-900/55 p-4 animate-pop-in">
             <div class="card rounded-4xl px-8 py-7 text-center max-w-sm w-full shadow-float bg-white">
               @if (chess.isCheckmate()) {
                 <div class="mx-auto mb-4 grid place-items-center w-16 h-16 rounded-3xl text-3xl animate-drop-in"
@@ -134,7 +154,14 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
                   </svg>
                 </div>
-                <div class="text-2xl font-bold text-sand-800 mb-5">{{ i18n.t().stalemate }}</div>
+                <div class="text-2xl font-bold text-sand-800 mb-1">
+                  {{ chess.isStalemate() ? i18n.t().stalemate : i18n.t().draw }}
+                </div>
+                @if (chess.isDraw()) {
+                  <div class="text-sm text-sand-600 mb-5">{{ drawText() }}</div>
+                } @else {
+                  <div class="mb-5"></div>
+                }
               }
               <div class="flex gap-2">
                 <button (click)="dismissGameOver()" class="btn-soft flex-1">
@@ -225,8 +252,7 @@
 
       <!-- AI Coach -->
       @if (!history.isReplayMode()) {
-        <div class="flex-none rounded-4xl p-5 shadow-soft border border-orchid-200/60
-                    bg-gradient-to-br from-orchid-50 via-white to-orchid-50">
+        <div class="flex-none rounded-4xl p-5 bg-orchid-50 border border-orchid-200">
           <h3 class="section-title text-sm text-orchid-800 mb-2">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
@@ -267,6 +293,51 @@
             </button>
           </div>
 
+          <!-- Review controls -->
+          <div class="flex-none px-4 py-2.5 border-b border-sand-200/70 flex items-center gap-2">
+            <button
+              (click)="onReviewGame()"
+              [disabled]="!canReview()"
+              class="btn-soft btn-sm flex-none">
+              @if (analysis.isRunning()) {
+                {{ i18n.t().reviewCancel }}
+              } @else if (analysis.hasResults()) {
+                {{ i18n.t().reviewAgain }}
+              } @else {
+                {{ i18n.t().reviewGame }}
+              }
+            </button>
+
+            @if (analysis.isRunning()) {
+              <div class="flex-1 min-w-0 flex items-center gap-2">
+                <div class="flex-1 h-1.5 rounded-full bg-sand-200 overflow-hidden">
+                  <div class="h-full bg-honey-500 transition-[width] duration-200"
+                       [style.width.%]="analysis.progressPercent()"></div>
+                </div>
+                <span class="flex-none text-[11px] font-mono text-sand-500">
+                  {{ analysis.progress().done }}/{{ analysis.progress().total }}
+                </span>
+              </div>
+            } @else if (analysis.assessment(); as report) {
+              <div class="flex-1 flex items-center justify-end gap-3 text-[11px] text-sand-600">
+                <span class="flex items-center gap-1">
+                  <span class="w-2.5 h-2.5 rounded-sm bg-white border border-sand-400"></span>
+                  {{ report.white.accuracy }}%
+                </span>
+                <span class="flex items-center gap-1">
+                  <span class="w-2.5 h-2.5 rounded-sm bg-sand-800"></span>
+                  {{ report.black.accuracy }}%
+                </span>
+              </div>
+            }
+          </div>
+
+          @if (analysis.error()) {
+            <p class="flex-none px-4 py-2 text-xs text-rose-700 bg-rose-50 border-b border-rose-100">
+              {{ analysis.error() }}
+            </p>
+          }
+
           @if (showMoveHistory()) {
             <div class="flex-1 min-h-0 overflow-y-auto p-2 max-h-72 lg:max-h-none">
               @if (history.currentGame()!.moves.length === 0) {
@@ -276,16 +347,27 @@
               } @else {
                 <div class="flex flex-col gap-1">
                   @for (move of history.currentGame()!.moves.slice().reverse(); track $index) {
+                    @let moveNumber = history.currentGame()!.moves.length - $index;
+                    @let ply = moveNumber - 1;
+                    @let quality = qualityFor(ply);
                     <div
                       class="flex items-center gap-2 text-sm py-2 px-3 rounded-2xl transition-colors hover:bg-sand-100/70"
                       [class.bg-honey-100]="history.isReplayMode() && history.replayIndex() === $index + 1"
-                      [class.font-semibold]="history.isReplayMode() && history.replayIndex() === $index + 1">
+                      [class.font-semibold]="history.isReplayMode() && history.replayIndex() === $index + 1"
+                      [title]="qualityTooltip(ply)">
                       <span class="grid place-items-center flex-none w-6 h-6 rounded-lg bg-sand-100 text-[10px] font-bold text-sand-500">
-                        {{ history.currentGame()!.moves.length - $index }}
+                        {{ moveNumber }}
                       </span>
                       <span class="flex-1 text-sand-700 truncate">
-                        {{ getMoveDescription(move, history.currentGame()!.moves.length - $index) }}
+                        {{ getMoveDescription(move, moveNumber) }}
                       </span>
+
+                      @if (quality) {
+                        <span class="move-mark flex-none" [attr.data-q]="quality">
+                          {{ qualitySymbol(quality) }}
+                        </span>
+                      }
+
                       <span class="flex-none text-base leading-none"
                             [class.text-sand-400]="move.piece.color === 'w'"
                             [class.text-sand-800]="move.piece.color === 'b'">♚</span>

@@ -87,9 +87,11 @@ export class AiHintsService {
     const history = this.chess.history();
     const lang = this.i18n.currentLang();
 
-    // Convert board to FEN-like representation
+    // Diagram plus a real FEN - the engine can produce one now, and models are
+    // far better at reasoning about a position given standard notation.
     const boardState = this.boardToText(board);
-    
+    const fen = this.chess.getFen();
+
     // Get last few moves for context
     const recentMoves = history.slice(-3).map((move, idx) => {
       const from = this.posToNotation(move.from);
@@ -102,6 +104,8 @@ export class AiHintsService {
 
 מצב הלוח:
 ${boardState}
+
+FEN: ${fen}
 
 תור נוכחי: ${turn === 'w' ? 'לבן' : 'שחור'}
 ${isCheck ? 'המלך בשח!' : ''}
@@ -116,6 +120,8 @@ You are an expert chess coach. Please provide a brief, helpful hint (2-3 sentenc
 
 Board State:
 ${boardState}
+
+FEN: ${fen}
 
 Current Turn: ${turn === 'w' ? 'White' : 'Black'}
 ${isCheck ? 'King is in check!' : ''}

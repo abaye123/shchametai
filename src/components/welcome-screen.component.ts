@@ -2,7 +2,7 @@ import { Component, inject, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { I18nService } from '../services/i18n.service';
 import { GameHistoryService } from '../services/game-history.service';
-import { GameMode, Difficulty } from '../models/app.types';
+import { GameMode, LevelId, LEVELS, DEFAULT_LEVEL } from '../models/app.types';
 
 @Component({
   selector: 'app-welcome-screen',
@@ -10,25 +10,45 @@ import { GameMode, Difficulty } from '../models/app.types';
   imports: [CommonModule],
   styles: [`
     :host { display: block; }
+
+    /* The level ladder itself is styled once, globally, in index.css -
+       the settings screen renders the same control. */
+
+    /* A wordmark rule: a hairline that stops at the text. Cheap, quiet,
+       and it gives the hero a horizon line instead of a glowing tile. */
+    .rule {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .rule::before,
+    .rule::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e6ded1;
+    }
   `],
   template: `
     <div class="screen-scroll">
       <main class="mx-auto w-full max-w-xl px-4 py-6 sm:py-8">
-        <div class="card card-pad rounded-5xl shadow-lift animate-slide-up">
+        <div class="card card-pad rounded-5xl animate-slide-up">
 
-          <!-- Hero -->
-          <div class="text-center mb-6">
-            <div class="mx-auto mb-4 grid place-items-center w-24 h-24 rounded-[2rem] shadow-lift
-                        bg-gradient-to-br from-honey-100 via-white to-orchid-100 border border-white">
-              <img src="src/assets/logo.png" alt="" class="w-16 h-16 object-contain">
-            </div>
-            <h2 class="text-2xl sm:text-3xl font-bold text-sand-900 mb-1.5">{{ i18n.t().welcome }}</h2>
-            <p class="text-sand-600 text-sm leading-relaxed">{{ i18n.t().welcomeMessage }}</p>
+          <!-- Hero: the logo sits on paper, not on a glowing tile. -->
+          <div class="text-center mb-7">
+            <img src="src/assets/logo.png" alt="" class="mx-auto mb-4 w-20 h-20 object-contain">
+            <h2 class="text-[1.75rem] sm:text-4xl font-bold text-sand-900 leading-tight tracking-tight mb-2">
+              {{ i18n.t().welcome }}
+            </h2>
+            <p class="text-sand-600 text-sm leading-relaxed max-w-sm mx-auto">
+              {{ i18n.t().welcomeMessage }}
+            </p>
           </div>
 
           <!-- Game Mode -->
-          <div class="mb-4">
-            <label class="block text-xs font-bold text-sand-500 uppercase tracking-wide mb-2 px-1">
+          <div class="mb-5">
+            <label class="label-cap">
               {{ i18n.t().gameMode }}
             </label>
             <div class="segment">
@@ -48,24 +68,38 @@ import { GameMode, Difficulty } from '../models/app.types';
           </div>
 
           @if (selectedGameMode === 'computer') {
-            <!-- Difficulty -->
-            <div class="mb-4 animate-slide-up">
-              <label class="block text-xs font-bold text-sand-500 uppercase tracking-wide mb-2 px-1">
-                {{ i18n.t().difficulty }}
+            <!-- Level ladder -->
+            <div class="mb-5 animate-slide-up">
+              <label id="level-label" class="label-cap">
+                {{ i18n.t().level }}
               </label>
-              <div class="segment">
-                <button (click)="selectedDifficulty = 'easy'" class="segment-item"
-                        [class.is-active]="selectedDifficulty === 'easy'">{{ i18n.t().easy }}</button>
-                <button (click)="selectedDifficulty = 'medium'" class="segment-item"
-                        [class.is-active]="selectedDifficulty === 'medium'">{{ i18n.t().medium }}</button>
-                <button (click)="selectedDifficulty = 'hard'" class="segment-item"
-                        [class.is-active]="selectedDifficulty === 'hard'">{{ i18n.t().hard }}</button>
+              <div class="level-grid" role="group" aria-labelledby="level-label">
+                @for (lvl of levels; track lvl.id) {
+                  <button
+                    type="button"
+                    (click)="selectedLevel = lvl.id"
+                    class="level-card"
+                    [class.is-active]="selectedLevel === lvl.id"
+                    [attr.aria-pressed]="selectedLevel === lvl.id"
+                    [attr.aria-label]="i18n.t().level + ' ' + lvl.id + ' - ' + i18n.t()[lvl.nameKey] + ', ' + i18n.t().estimatedRating + ' ' + lvl.elo">
+                    <span class="level-head">
+                      <span class="level-badge">{{ lvl.id }}</span>
+                      <span class="level-name">{{ i18n.t()[lvl.nameKey] }}</span>
+                    </span>
+                    <span class="chip level-elo">~{{ lvl.elo }}</span>
+                    <span class="level-dots" aria-hidden="true">
+                      @for (d of dots; track d) {
+                        <span class="level-dot" [class.is-on]="d <= lvl.id"></span>
+                      }
+                    </span>
+                  </button>
+                }
               </div>
             </div>
 
             <!-- Player Colour -->
-            <div class="mb-5 animate-slide-up">
-              <label class="block text-xs font-bold text-sand-500 uppercase tracking-wide mb-2 px-1">
+            <div class="mb-6 animate-slide-up">
+              <label class="label-cap">
                 {{ i18n.currentLang() === 'he' ? 'בחר צבע' : 'Choose Colour' }}
               </label>
               <div class="segment">
@@ -84,7 +118,7 @@ import { GameMode, Difficulty } from '../models/app.types';
           }
 
           <!-- Actions -->
-          <div class="flex flex-col gap-2.5">
+          <div class="flex flex-col gap-2">
             <button (click)="onStartNewGame()" class="btn-primary btn-lg w-full">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="size-5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
@@ -98,7 +132,7 @@ import { GameMode, Difficulty } from '../models/app.types';
               </svg>
               {{ i18n.t().viewHistory }}
               @if (history.savedGames().length) {
-                <span class="chip bg-white/25 text-white">{{ history.savedGames().length }}</span>
+                <span class="chip bg-white/15 text-white">{{ history.savedGames().length }}</span>
               }
             </button>
           </div>
@@ -116,7 +150,7 @@ import { GameMode, Difficulty } from '../models/app.types';
           </div>
         </div>
 
-        <p class="text-center text-xs text-sand-400 mt-4">
+        <p class="rule text-center text-[11px] uppercase tracking-label text-sand-400 mt-6 mx-2">
           {{ i18n.currentLang() === 'he' ? 'עובד גם ללא חיבור לאינטרנט' : 'Works fully offline' }}
         </p>
       </main>
@@ -127,17 +161,20 @@ export class WelcomeScreenComponent {
   i18n = inject(I18nService);
   history = inject(GameHistoryService);
 
+  readonly levels = LEVELS;
+  readonly dots = [1, 2, 3, 4, 5, 6];
+
   selectedGameMode: GameMode = 'human';
-  selectedDifficulty: Difficulty = 'medium';
+  selectedLevel: LevelId = DEFAULT_LEVEL;
   selectedPlayerColor: 'w' | 'b' = 'w';
 
-  startNewGame = output<{ gameMode: GameMode; difficulty: Difficulty; playerColor: 'w' | 'b' }>();
+  startNewGame = output<{ gameMode: GameMode; level: LevelId; playerColor: 'w' | 'b' }>();
   goToHistory = output<void>();
 
   onStartNewGame() {
     this.startNewGame.emit({
       gameMode: this.selectedGameMode,
-      difficulty: this.selectedDifficulty,
+      level: this.selectedLevel,
       playerColor: this.selectedPlayerColor
     });
   }

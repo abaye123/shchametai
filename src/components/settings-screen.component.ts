@@ -2,7 +2,7 @@ import { Component, inject, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { I18nService } from '../services/i18n.service';
-import { GameMode, Difficulty } from '../models/app.types';
+import { GameMode, LevelId, LEVELS, DEFAULT_LEVEL } from '../models/app.types';
 
 @Component({
   selector: 'app-settings-screen',
@@ -10,30 +10,33 @@ import { GameMode, Difficulty } from '../models/app.types';
   imports: [CommonModule, FormsModule],
   styles: [`
     :host { display: block; }
+
+    /* The level ladder is styled once, globally, in index.css - the
+       welcome screen renders the same control. */
   `],
   template: `
     <div class="screen-scroll">
       <main class="mx-auto w-full max-w-xl px-4 py-6 sm:py-8">
-        <div class="card card-pad rounded-5xl shadow-lift animate-slide-up">
+        <div class="card card-pad rounded-5xl animate-slide-up">
 
           <!-- Header -->
-          <div class="text-center mb-6">
-            <div class="mx-auto mb-3 grid place-items-center w-16 h-16 rounded-3xl shadow-soft
-                        bg-gradient-to-br from-sand-100 to-white border border-white text-sand-500">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.4" stroke="currentColor" class="size-8">
+          <div class="text-center mb-7">
+            <div class="mx-auto mb-3 grid place-items-center w-12 h-12 rounded-2xl
+                        bg-sand-100 border border-sand-200 text-sand-500">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.03 7.03 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.397-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
               </svg>
             </div>
-            <h2 class="text-2xl font-bold text-sand-900 mb-1">{{ i18n.t().settings }}</h2>
+            <h2 class="text-2xl sm:text-3xl font-bold text-sand-900 tracking-tight mb-1">{{ i18n.t().settings }}</h2>
             <p class="text-sand-600 text-sm">
               {{ i18n.currentLang() === 'he' ? 'התאם את הגדרות המשחק' : 'Configure game settings' }}
             </p>
           </div>
 
           <!-- Game Mode -->
-          <div class="mb-4">
-            <label class="block text-xs font-bold text-sand-500 uppercase tracking-wide mb-2 px-1">
+          <div class="mb-5">
+            <label class="label-cap">
               {{ i18n.t().gameMode }}
             </label>
             <div class="segment">
@@ -49,22 +52,36 @@ import { GameMode, Difficulty } from '../models/app.types';
           </div>
 
           @if (currentGameMode === 'computer') {
-            <div class="mb-4 animate-slide-up">
-              <label class="block text-xs font-bold text-sand-500 uppercase tracking-wide mb-2 px-1">
-                {{ i18n.t().difficulty }}
+            <div class="mb-5 animate-slide-up">
+              <label id="settings-level-label" class="label-cap">
+                {{ i18n.t().level }}
               </label>
-              <div class="segment">
-                <button (click)="currentDifficulty = 'easy'" class="segment-item"
-                        [class.is-active]="currentDifficulty === 'easy'">{{ i18n.t().easy }}</button>
-                <button (click)="currentDifficulty = 'medium'" class="segment-item"
-                        [class.is-active]="currentDifficulty === 'medium'">{{ i18n.t().medium }}</button>
-                <button (click)="currentDifficulty = 'hard'" class="segment-item"
-                        [class.is-active]="currentDifficulty === 'hard'">{{ i18n.t().hard }}</button>
+              <div class="level-grid" role="group" aria-labelledby="settings-level-label">
+                @for (lvl of levels; track lvl.id) {
+                  <button
+                    type="button"
+                    (click)="currentLevel = lvl.id"
+                    class="level-card"
+                    [class.is-active]="currentLevel === lvl.id"
+                    [attr.aria-pressed]="currentLevel === lvl.id"
+                    [attr.aria-label]="i18n.t().level + ' ' + lvl.id + ' - ' + i18n.t()[lvl.nameKey] + ', ' + i18n.t().estimatedRating + ' ' + lvl.elo">
+                    <span class="level-head">
+                      <span class="level-badge">{{ lvl.id }}</span>
+                      <span class="level-name">{{ i18n.t()[lvl.nameKey] }}</span>
+                    </span>
+                    <span class="chip level-elo">~{{ lvl.elo }}</span>
+                    <span class="level-dots" aria-hidden="true">
+                      @for (d of dots; track d) {
+                        <span class="level-dot" [class.is-on]="d <= lvl.id"></span>
+                      }
+                    </span>
+                  </button>
+                }
               </div>
             </div>
 
-            <div class="mb-5 animate-slide-up">
-              <label class="block text-xs font-bold text-sand-500 uppercase tracking-wide mb-2 px-1">
+            <div class="mb-6 animate-slide-up">
+              <label class="label-cap">
                 {{ i18n.currentLang() === 'he' ? 'בחר צבע' : 'Choose Colour' }}
               </label>
               <div class="segment">
@@ -85,7 +102,7 @@ import { GameMode, Difficulty } from '../models/app.types';
           <!-- API Key -->
           <div class="card-flat p-5 mb-6">
             <h3 class="section-title text-sm mb-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor" class="size-5 text-orchid-500">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor" class="size-4 text-sand-500">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
               </svg>
               {{ i18n.t().apiKey }}
@@ -95,7 +112,7 @@ import { GameMode, Difficulty } from '../models/app.types';
             @if (!editingApiKey) {
               <div class="flex flex-col gap-2">
                 <div class="flex items-center gap-2">
-                  <div class="flex-1 min-w-0 px-4 py-2.5 bg-white rounded-2xl border border-sand-200 text-sm font-mono truncate text-sand-500">
+                  <div class="flex-1 min-w-0 px-3.5 py-2.5 bg-white rounded-2xl border border-sand-300 text-sm font-mono truncate text-sand-500">
                     {{ apiKey() ? '••••••••••••••••' : i18n.t().apiKeyPlaceholder }}
                   </div>
                   <button (click)="startEditingApiKey()" class="btn-accent btn-sm flex-none">
@@ -129,7 +146,7 @@ import { GameMode, Difficulty } from '../models/app.types';
           </div>
 
           <!-- Actions -->
-          <div class="flex flex-col gap-2.5">
+          <div class="flex flex-col gap-2">
             <button (click)="onApplySettings()" class="btn-primary btn-lg w-full">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
@@ -159,40 +176,43 @@ import { GameMode, Difficulty } from '../models/app.types';
 export class SettingsScreenComponent {
   i18n = inject(I18nService);
 
+  readonly levels = LEVELS;
+  readonly dots = [1, 2, 3, 4, 5, 6];
+
   // Inputs
   gameMode = input.required<GameMode>();
-  difficulty = input.required<Difficulty>();
+  level = input.required<LevelId>();
   apiKey = input.required<string>();
 
   // Outputs
-  applySettings = output<{ gameMode: GameMode; difficulty: Difficulty }>();
-  startNewGame = output<{ gameMode: GameMode; difficulty: Difficulty; playerColor: 'w' | 'b' }>();
+  applySettings = output<{ gameMode: GameMode; level: LevelId }>();
+  startNewGame = output<{ gameMode: GameMode; level: LevelId; playerColor: 'w' | 'b' }>();
   updateApiKey = output<string>();
   back = output<void>();
 
   // Local state
   currentGameMode: GameMode = 'human';
-  currentDifficulty: Difficulty = 'medium';
+  currentLevel: LevelId = DEFAULT_LEVEL;
   currentPlayerColor: 'w' | 'b' = 'w';
   editingApiKey = false;
   tempApiKey = '';
 
   ngOnInit() {
     this.currentGameMode = this.gameMode();
-    this.currentDifficulty = this.difficulty();
+    this.currentLevel = this.level();
   }
 
   onApplySettings() {
     this.applySettings.emit({
       gameMode: this.currentGameMode,
-      difficulty: this.currentDifficulty
+      level: this.currentLevel
     });
   }
 
   onStartNewGame() {
     this.startNewGame.emit({
       gameMode: this.currentGameMode,
-      difficulty: this.currentDifficulty,
+      level: this.currentLevel,
       playerColor: this.currentPlayerColor
     });
   }

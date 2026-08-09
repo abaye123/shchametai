@@ -1,6 +1,37 @@
-import { Injectable, signal, computed, inject } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { SoundService } from './sound.service';
 import { GameHistoryService } from './game-history.service';
+import { Position as EnginePosition } from '../engine/position.ts';
+import {
+  generateLegalMoves,
+  getStatus,
+  legalMovesFrom,
+} from '../engine/movegen.ts';
+import {
+  BLACK,
+  KNIGHT,
+  MAX_MOVES,
+  PIECE_TO_CHAR,
+  QUEEN,
+  STARTING_FEN,
+  WHITE,
+  colOf,
+  moveFrom,
+  moveIsCastle,
+  moveIsEnPassant,
+  moveIsPromotion,
+  movePromotion,
+  moveTo,
+  moveToUci,
+  pieceColor,
+  pieceType,
+  rowOf,
+  squareOf,
+  type ColorCode,
+  type GameResult,
+  type PackedMove,
+  type PieceCode,
+} from '../engine/types.ts';
 
 export type Color = 'w' | 'b';
 export type PieceType = 'p' | 'r' | 'n' | 'b' | 'q' | 'k';
@@ -8,7 +39,7 @@ export type PieceType = 'p' | 'r' | 'n' | 'b' | 'q' | 'k';
 export interface Piece {
   type: PieceType;
   color: Color;
-  hasMoved?: boolean; // Track if piece has moved for castling
+  hasMoved?: boolean;
 }
 
 export interface Position {
@@ -24,179 +55,404 @@ export interface Move {
   isCastle?: boolean;
   castleRookFrom?: Position;
   castleRookTo?: Position;
+  /** Piece a pawn promoted to. Absent on non-promotion moves. */
+  promotion?: PieceType;
+  isEnPassant?: boolean;
 }
 
+/** A move the player has committed to but must still pick a promotion piece for. */
+export interface PendingPromotion {
+  from: Position;
+  to: Position;
+  color: Color;
+}
+
+const TYPE_CHARS: PieceType[] = ['p', 'p', 'n', 'b', 'r', 'q', 'k'];
+
+/**
+ * Angular-facing wrapper around the engine core.
+ *
+ * All the chess rules and all the performance work live in `src/engine`, which
+ * is deliberately framework-free so it can also run inside the Web Worker. This
+ * service owns only the signal state the UI binds to, and the translation
+ * between the core's integer squares and the `{row, col}` objects the templates
+ * already speak.
+ *
+ * Square numbering matches the UI exactly - `row * 8 + col`, row 0 = rank 8 -
+ * so the conversion is arithmetic, not a lookup.
+ */
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class ChessEngineService {
   private soundService = inject(SoundService);
   private historyService = inject(GameHistoryService);
 
-  // State
+  /** The authoritative game state. Signals below are projections of it. */
+  private pos = EnginePosition.initial();
+
+  /** Scratch buffer for legal move generation. Never resized. */
+  private readonly moveBuf = new Int32Array(MAX_MOVES);
+
+  /** UCI move list from the starting position - what the worker replays. */
+  private uciHistory: string[] = [];
+
+  // --- State the templates bind to -----------------------------------------
   board = signal<(Piece | null)[][]>([]);
   turn = signal<Color>('w');
   history = signal<Move[]>([]);
   selectedSquare = signal<Position | null>(null);
   validMoves = signal<Position[]>([]);
-  
-  // Game Status
+
   isCheck = signal<boolean>(false);
   isCheckmate = signal<boolean>(false);
   isStalemate = signal<boolean>(false);
   winner = signal<Color | null>(null);
 
+  /** Drawn by fifty-move, threefold repetition or insufficient material. */
+  isDraw = signal<boolean>(false);
+  drawReason = signal<GameResult | null>(null);
+
+  /** Set when a pawn reaches the last rank and the UI must ask which piece. */
+  pendingPromotion = signal<PendingPromotion | null>(null);
+
   constructor() {
     this.resetGame();
   }
 
+  // -------------------------------------------------------------------------
+  // Game lifecycle
+  // -------------------------------------------------------------------------
+
   resetGame() {
-    this.board.set(this.createInitialBoard());
-    this.turn.set('w');
+    this.pos = EnginePosition.initial();
+    this.uciHistory = [];
     this.history.set([]);
     this.selectedSquare.set(null);
     this.validMoves.set([]);
-    this.isCheck.set(false);
-    this.isCheckmate.set(false);
-    this.isStalemate.set(false);
-    this.winner.set(null);
+    this.pendingPromotion.set(null);
+    this.syncFromPosition();
+  }
+
+  /** UCI move list, for handing the position to the search worker. */
+  getUciHistory(): string[] {
+    return this.uciHistory.slice();
+  }
+
+  getStartFen(): string {
+    return STARTING_FEN;
+  }
+
+  getFen(): string {
+    return this.pos.toFen();
+  }
+
+  /** A snapshot the computer opponent can search without racing the UI. */
+  clonePosition(): EnginePosition {
+    return this.pos.clone();
   }
 
   undo() {
-    const hist = this.history();
-    if (hist.length === 0) return;
+    if (this.history().length === 0) return;
 
-    const lastMove = hist[hist.length - 1];
-    
-    // Revert board
-    const newBoard = this.copyBoard(this.board());
-    
-    // Move piece back
-    const piece = { ...lastMove.piece };
-    newBoard[lastMove.from.row][lastMove.from.col] = piece;
-    newBoard[lastMove.to.row][lastMove.to.col] = lastMove.captured || null;
-
-    // Handle castling revert
-    if (lastMove.isCastle && lastMove.castleRookFrom && lastMove.castleRookTo) {
-      const rook = newBoard[lastMove.castleRookTo.row][lastMove.castleRookTo.col];
-      if (rook) {
-        newBoard[lastMove.castleRookFrom.row][lastMove.castleRookFrom.col] = { ...rook };
-        newBoard[lastMove.castleRookTo.row][lastMove.castleRookTo.col] = null;
-      }
-    }
-    
-    this.board.set(newBoard);
+    this.pos.unmakeMove();
+    this.uciHistory.pop();
     this.history.update(h => h.slice(0, -1));
-    this.turn.set(this.turn() === 'w' ? 'b' : 'w');
     this.selectedSquare.set(null);
     this.validMoves.set([]);
-    
-    this.updateGameStatus();
+    this.pendingPromotion.set(null);
+    this.syncFromPosition();
   }
 
-  selectSquare(row: number, col: number) {
-    if (this.winner() || this.isCheckmate() || this.isStalemate()) return;
+  // -------------------------------------------------------------------------
+  // Input handling
+  // -------------------------------------------------------------------------
 
-    const piece = this.board()[row][col];
+  selectSquare(row: number, col: number) {
+    if (this.isGameOver() || this.pendingPromotion()) return;
+
+    const sq = squareOf(row, col);
     const selected = this.selectedSquare();
 
-    // If we have a selected piece and click on a valid move
     if (selected) {
-      const isMove = this.validMoves().some(m => m.row === row && m.col === col);
-      if (isMove) {
-        this.makeMove(selected, { row, col });
+      const isTarget = this.validMoves().some(m => m.row === row && m.col === col);
+      if (isTarget) {
+        this.commitMove(squareOf(selected.row, selected.col), sq);
         return;
       }
     }
 
-    // If clicked on own piece, select it
-    if (piece && piece.color === this.turn()) {
+    const piece = this.pos.squares[sq];
+    if (piece !== 0 && this.colorChar(pieceColor(piece)) === this.turn()) {
       this.selectedSquare.set({ row, col });
-      this.validMoves.set(this.getValidMoves({ row, col }, this.board()));
+      this.validMoves.set(
+        legalMovesFrom(this.pos, sq).map(m => this.toPosition(moveTo(m))),
+      );
     } else {
       this.selectedSquare.set(null);
       this.validMoves.set([]);
     }
   }
 
-  makeMove(from: Position, to: Position, skipHistoryRecord = false) {
-    const board = this.board();
-    const piece = board[from.row][from.col];
-    
-    if (!piece) {
-      console.warn('Attempted to move non-existent piece');
-      return;
-    }
-    
-    const captured = board[to.row][to.col];
-    const newBoard = this.copyBoard(board);
-    
-    // Check if this is a castling move
-    const isCastleMove = piece.type === 'k' && Math.abs(to.col - from.col) === 2;
-    let castleRookFrom: Position | undefined;
-    let castleRookTo: Position | undefined;
+  /**
+   * Resolves a from/to pair against the real legal move list and plays it.
+   * When the move is a promotion and no piece was chosen, the move is parked in
+   * `pendingPromotion` and the UI is expected to ask. Everything goes through
+   * here, so an illegal move can never reach the board - the previous engine
+   * let the AI write moves straight onto the board without revalidating them.
+   */
+  private commitMove(fromSq: number, toSq: number, promotion?: PieceCode): boolean {
+    const candidates = legalMovesFrom(this.pos, fromSq).filter(m => moveTo(m) === toSq);
+    if (candidates.length === 0) return false;
 
-    if (isCastleMove) {
-      // King-side castle (moving right)
-      if (to.col > from.col) {
-        castleRookFrom = { row: from.row, col: 7 };
-        castleRookTo = { row: from.row, col: to.col - 1 };
-      }
-      // Queen-side castle (moving left)
-      else {
-        castleRookFrom = { row: from.row, col: 0 };
-        castleRookTo = { row: from.row, col: to.col + 1 };
-      }
-      
-      // Move the rook
-      const rook = newBoard[castleRookFrom.row][castleRookFrom.col];
-      if (rook) {
-        newBoard[castleRookTo.row][castleRookTo.col] = { ...rook, hasMoved: true };
-        newBoard[castleRookFrom.row][castleRookFrom.col] = null;
-      }
+    if (candidates.length > 1 && moveIsPromotion(candidates[0]) && promotion === undefined) {
+      this.pendingPromotion.set({
+        from: this.toPosition(fromSq),
+        to: this.toPosition(toSq),
+        color: this.turn(),
+      });
+      return false;
     }
 
-    // Move the piece
-    newBoard[to.row][to.col] = { ...piece, hasMoved: true };
-    newBoard[from.row][from.col] = null;
+    const chosen = promotion !== undefined
+      ? candidates.find(m => movePromotion(m) === promotion) ?? candidates[0]
+      : candidates[0];
 
-    // Pawn promotion (auto Queen for simplicity)
-    if (piece.type === 'p' && (to.row === 0 || to.row === 7)) {
-      newBoard[to.row][to.col] = { type: 'q', color: piece.color, hasMoved: true };
+    this.playMove(chosen, false);
+    return true;
+  }
+
+  /** Called by the promotion dialog. */
+  choosePromotion(type: 'q' | 'r' | 'b' | 'n') {
+    const pending = this.pendingPromotion();
+    if (!pending) return;
+
+    this.pendingPromotion.set(null);
+    const codes: Record<string, PieceCode> = { q: QUEEN, r: 4, b: 3, n: KNIGHT };
+    this.commitMove(
+      squareOf(pending.from.row, pending.from.col),
+      squareOf(pending.to.row, pending.to.col),
+      codes[type],
+    );
+  }
+
+  cancelPromotion() {
+    this.pendingPromotion.set(null);
+    this.selectedSquare.set(null);
+    this.validMoves.set([]);
+  }
+
+  /**
+   * Plays a move given as coordinates. Used by the computer opponent and by
+   * replay. `skipSideEffects` suppresses sound and history recording, which is
+   * what replay needs so it does not re-record the moves it is replaying.
+   */
+  makeMove(from: Position, to: Position, skipSideEffects = false): boolean {
+    const fromSq = squareOf(from.row, from.col);
+    const toSq = squareOf(to.row, to.col);
+    const candidates = legalMovesFrom(this.pos, fromSq).filter(m => moveTo(m) === toSq);
+    if (candidates.length === 0) return false;
+
+    // Old saved games predate promotion choice, so default to a queen.
+    const chosen = candidates.find(m => movePromotion(m) === QUEEN) ?? candidates[0];
+    this.playMove(chosen, skipSideEffects);
+    return true;
+  }
+
+  /** Plays a move already in the engine's packed form. */
+  playPackedMove(move: PackedMove, skipSideEffects = false): boolean {
+    if (move === 0) return false;
+    this.playMove(move, skipSideEffects);
+    return true;
+  }
+
+  /**
+   * Converts a saved game's move list into UCI, by replaying it on a scratch
+   * position. Needed because saved games store `{from, to}` coordinates, while
+   * the analyser speaks UCI. Replaying is also what resolves the promotion
+   * piece for games recorded before promotion choice existed.
+   *
+   * Stops at the first move that will not replay, returning what it had.
+   */
+  uciForMoves(moves: { from: Position; to: Position; promotion?: PieceType }[]): string[] {
+    const scratch = EnginePosition.initial();
+    const buf = new Int32Array(MAX_MOVES);
+    const out: string[] = [];
+
+    for (const move of moves) {
+      const fromSq = squareOf(move.from.row, move.from.col);
+      const toSq = squareOf(move.to.row, move.to.col);
+      const n = generateLegalMoves(scratch, buf, 0);
+
+      let chosen = 0;
+      let fallback = 0;
+      for (let i = 0; i < n; i++) {
+        const m = buf[i];
+        if (moveFrom(m) !== fromSq || moveTo(m) !== toSq) continue;
+        if (!fallback) fallback = m;
+        const promoChar = movePromotion(m) ? PIECE_TO_CHAR[movePromotion(m)] : undefined;
+        if (promoChar === move.promotion) { chosen = m; break; }
+        if (!move.promotion && movePromotion(m) === QUEEN) chosen = m;
+      }
+
+      const played = chosen || fallback;
+      if (!played) break;
+
+      out.push(moveToUci(played));
+      scratch.makeMove(played);
     }
 
-    const move: Move = { 
-      from, 
-      to, 
-      piece, 
-      captured: captured || undefined,
-      isCastle: isCastleMove,
-      castleRookFrom,
-      castleRookTo
-    };
+    return out;
+  }
 
-    this.board.set(newBoard);
-    this.history.update(h => [...h, move]);
-    this.turn.set(this.turn() === 'w' ? 'b' : 'w');
+  /** Resolves a UCI string ("e2e4", "e7e8q") against the legal moves. */
+  findUciMove(uci: string): PackedMove {
+    const n = generateLegalMoves(this.pos, this.moveBuf, 0);
+    for (let i = 0; i < n; i++) {
+      if (moveToUci(this.moveBuf[i]) === uci) return this.moveBuf[i];
+    }
+    if (uci.length === 4) {
+      for (let i = 0; i < n; i++) {
+        if (moveToUci(this.moveBuf[i]) === uci + 'q') return this.moveBuf[i];
+      }
+    }
+    return 0;
+  }
+
+  // -------------------------------------------------------------------------
+  // Applying a move
+  // -------------------------------------------------------------------------
+
+  private playMove(move: PackedMove, skipSideEffects: boolean) {
+    const record = this.describeMove(move);
+
+    if (!this.pos.makeMove(move)) return;
+    this.uciHistory.push(moveToUci(move));
+
+    this.history.update(h => [...h, record]);
     this.selectedSquare.set(null);
     this.validMoves.set([]);
 
-    // Record move in history service only if not skipping
-    if (!skipHistoryRecord) {
-      this.historyService.recordMove(move);
+    if (!skipSideEffects) {
+      this.historyService.recordMove(record);
     }
 
-    this.updateGameStatus();
-    
-    if (!skipHistoryRecord) {
-      this.triggerMoveSound(!!captured);
+    this.syncFromPosition();
+
+    if (!skipSideEffects) {
+      this.triggerMoveSound(!!record.captured);
     }
+  }
+
+  /**
+   * Builds the UI-facing move record. Must run BEFORE the move is applied,
+   * while the moving piece and the victim are still on their squares.
+   */
+  private describeMove(move: PackedMove): Move {
+    const fromSq = moveFrom(move);
+    const toSq = moveTo(move);
+    const movingCode = this.pos.squares[fromSq];
+    const color = pieceColor(movingCode);
+
+    const record: Move = {
+      from: this.toPosition(fromSq),
+      to: this.toPosition(toSq),
+      piece: { type: TYPE_CHARS[pieceType(movingCode)], color: this.colorChar(color) },
+    };
+
+    if (moveIsEnPassant(move)) {
+      // The victim sits beside the destination square, not on it.
+      record.captured = { type: 'p', color: this.colorChar(color === WHITE ? BLACK : WHITE) };
+      record.isEnPassant = true;
+    } else {
+      const victim = this.pos.squares[toSq];
+      if (victim !== 0) {
+        record.captured = {
+          type: TYPE_CHARS[pieceType(victim)],
+          color: this.colorChar(pieceColor(victim)),
+        };
+      }
+    }
+
+    if (moveIsPromotion(move)) {
+      record.promotion = PIECE_TO_CHAR[movePromotion(move)] as PieceType;
+    }
+
+    if (moveIsCastle(move)) {
+      const row = rowOf(fromSq);
+      const kingSide = colOf(toSq) > colOf(fromSq);
+      record.isCastle = true;
+      record.castleRookFrom = { row, col: kingSide ? 7 : 0 };
+      record.castleRookTo = { row, col: kingSide ? 5 : 3 };
+    }
+
+    return record;
+  }
+
+  // -------------------------------------------------------------------------
+  // Status
+  // -------------------------------------------------------------------------
+
+  isGameOver(): boolean {
+    return this.isCheckmate() || this.isStalemate() || this.isDraw();
+  }
+
+  /**
+   * Recomputes every projected signal from the core position. One place to
+   * change when the core grows a new terminal condition.
+   */
+  private syncFromPosition() {
+    this.board.set(this.buildBoardArray());
+    this.turn.set(this.colorChar(this.pos.turn));
+
+    const status = getStatus(this.pos);
+    this.isCheck.set(status.inCheck);
+
+    const checkmate = status.result === 'checkmate';
+    const stalemate = status.result === 'stalemate';
+    const drawn = status.result === 'fifty-move'
+      || status.result === 'threefold'
+      || status.result === 'insufficient-material';
+
+    this.isCheckmate.set(checkmate);
+    this.isStalemate.set(stalemate);
+    this.isDraw.set(drawn);
+    this.drawReason.set(drawn ? status.result : null);
+
+    if (checkmate && status.winner !== null) {
+      const winnerColor = this.colorChar(status.winner);
+      this.winner.set(winnerColor);
+      this.historyService.updateGameResult(winnerColor === 'w' ? 'white' : 'black');
+    } else {
+      // Clearing this matters: the previous engine left `winner` set after an
+      // undo from mate, which soft-locked the board because every click was
+      // rejected as "game already over".
+      this.winner.set(null);
+      if (stalemate || drawn) {
+        this.historyService.updateGameResult('draw');
+      }
+    }
+  }
+
+  private buildBoardArray(): (Piece | null)[][] {
+    const rows: (Piece | null)[][] = new Array(8);
+    for (let r = 0; r < 8; r++) {
+      const row: (Piece | null)[] = new Array(8);
+      for (let c = 0; c < 8; c++) {
+        const code = this.pos.squares[(r << 3) | c];
+        row[c] = code === 0
+          ? null
+          : { type: TYPE_CHARS[pieceType(code)], color: this.colorChar(pieceColor(code)) };
+      }
+      rows[r] = row;
+    }
+    return rows;
   }
 
   private triggerMoveSound(wasCapture: boolean) {
     if (this.isCheckmate()) {
       this.soundService.play('checkmate');
-    } else if (this.isStalemate()) {
+    } else if (this.isStalemate() || this.isDraw()) {
       this.soundService.play('game-over');
     } else if (this.isCheck()) {
       this.soundService.play('check');
@@ -207,259 +463,15 @@ export class ChessEngineService {
     }
   }
 
-  private updateGameStatus() {
-    const currentTurn = this.turn();
-    const board = this.board();
-    const inCheck = this.isKingInCheck(currentTurn, board);
-    this.isCheck.set(inCheck);
+  // -------------------------------------------------------------------------
+  // Conversions
+  // -------------------------------------------------------------------------
 
-    const hasMoves = this.hasAnyValidMoves(currentTurn, board);
-
-    if (!hasMoves) {
-      if (inCheck) {
-        this.isCheckmate.set(true);
-        const winnerColor = currentTurn === 'w' ? 'b' : 'w';
-        this.winner.set(winnerColor);
-        // Update game result in history
-        this.historyService.updateGameResult(winnerColor === 'w' ? 'white' : 'black');
-      } else {
-        this.isStalemate.set(true);
-        // Update game result as draw
-        this.historyService.updateGameResult('draw');
-      }
-    } else {
-        this.isCheckmate.set(false);
-        this.isStalemate.set(false);
-    }
+  private toPosition(sq: number): Position {
+    return { row: rowOf(sq), col: colOf(sq) };
   }
 
-  // --- Logic Helpers ---
-
-  getValidMoves(pos: Position, board: (Piece | null)[][], checkSafety = true): Position[] {
-    const piece = board[pos.row][pos.col];
-    if (!piece) return [];
-
-    let moves: Position[] = [];
-
-    switch (piece.type) {
-      case 'p': moves = this.getPawnMoves(pos, piece.color, board); break;
-      case 'r': moves = this.getSlidingMoves(pos, [[0,1], [0,-1], [1,0], [-1,0]], board); break;
-      case 'b': moves = this.getSlidingMoves(pos, [[1,1], [1,-1], [-1,1], [-1,-1]], board); break;
-      case 'q': moves = this.getSlidingMoves(pos, [[0,1], [0,-1], [1,0], [-1,0], [1,1], [1,-1], [-1,1], [-1,-1]], board); break;
-      case 'n': moves = this.getSteppingMoves(pos, [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]], board); break;
-      case 'k': 
-        moves = this.getSteppingMoves(pos, [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]], board);
-        // Only add castling moves when checking for actual moves, not when checking for attacks
-        if (checkSafety) {
-          moves = moves.concat(this.getCastlingMoves(pos, piece.color, board));
-        }
-        break;
-    }
-
-    if (checkSafety) {
-      moves = moves.filter(move => {
-        const newBoard = this.simulateMove(board, pos, move);
-        return !this.isKingInCheck(piece.color, newBoard);
-      });
-    }
-
-    return moves;
-  }
-
-  private getCastlingMoves(kingPos: Position, color: Color, board: (Piece | null)[][]): Position[] {
-    const moves: Position[] = [];
-    const king = board[kingPos.row][kingPos.col];
-    
-    // King must not have moved
-    if (!king || king.hasMoved) return moves;
-    
-    // King must not be in check
-    if (this.isKingInCheck(color, board)) return moves;
-    
-    const row = kingPos.row;
-    
-    // King-side castling (short castle)
-    const kingRook = board[row][7];
-    if (kingRook && kingRook.type === 'r' && kingRook.color === color && !kingRook.hasMoved) {
-      // Check if squares between king and rook are empty
-      if (!board[row][5] && !board[row][6]) {
-        // Check if king doesn't move through check
-        const through = { row, col: 5 };
-        const dest = { row, col: 6 };
-        
-        const throughBoard = this.simulateMove(board, kingPos, through);
-        const destBoard = this.simulateMove(board, kingPos, dest);
-        
-        if (!this.isKingInCheck(color, throughBoard) && !this.isKingInCheck(color, destBoard)) {
-          moves.push(dest);
-        }
-      }
-    }
-    
-    // Queen-side castling (long castle)
-    const queenRook = board[row][0];
-    if (queenRook && queenRook.type === 'r' && queenRook.color === color && !queenRook.hasMoved) {
-      // Check if squares between king and rook are empty
-      if (!board[row][1] && !board[row][2] && !board[row][3]) {
-        // Check if king doesn't move through check
-        const through = { row, col: 3 };
-        const dest = { row, col: 2 };
-        
-        const throughBoard = this.simulateMove(board, kingPos, through);
-        const destBoard = this.simulateMove(board, kingPos, dest);
-        
-        if (!this.isKingInCheck(color, throughBoard) && !this.isKingInCheck(color, destBoard)) {
-          moves.push(dest);
-        }
-      }
-    }
-    
-    return moves;
-  }
-
-  private simulateMove(board: (Piece | null)[][], from: Position, to: Position): (Piece | null)[][] {
-    const newBoard = this.copyBoard(board);
-    newBoard[to.row][to.col] = newBoard[from.row][from.col];
-    newBoard[from.row][from.col] = null;
-    return newBoard;
-  }
-
-  private getPawnMoves(pos: Position, color: Color, board: (Piece | null)[][]): Position[] {
-    const moves: Position[] = [];
-    const dir = color === 'w' ? -1 : 1;
-    const startRow = color === 'w' ? 6 : 1;
-
-    // Forward 1
-    if (this.isValidPos(pos.row + dir, pos.col) && !board[pos.row + dir][pos.col]) {
-      moves.push({ row: pos.row + dir, col: pos.col });
-      // Forward 2
-      if (pos.row === startRow && this.isValidPos(pos.row + dir * 2, pos.col) && !board[pos.row + dir * 2][pos.col]) {
-        moves.push({ row: pos.row + dir * 2, col: pos.col });
-      }
-    }
-
-    // Captures
-    const captureOffsets = [[dir, -1], [dir, 1]];
-    for (const [dr, dc] of captureOffsets) {
-      const r = pos.row + dr, c = pos.col + dc;
-      if (this.isValidPos(r, c)) {
-        const target = board[r][c];
-        if (target && target.color !== color) {
-          moves.push({ row: r, col: c });
-        }
-      }
-    }
-    return moves;
-  }
-
-  private getSlidingMoves(pos: Position, dirs: number[][], board: (Piece | null)[][]): Position[] {
-    const moves: Position[] = [];
-    const piece = board[pos.row][pos.col]!;
-
-    for (const [dr, dc] of dirs) {
-      let r = pos.row + dr;
-      let c = pos.col + dc;
-      while (this.isValidPos(r, c)) {
-        const target = board[r][c];
-        if (!target) {
-          moves.push({ row: r, col: c });
-        } else {
-          if (target.color !== piece.color) moves.push({ row: r, col: c });
-          break;
-        }
-        r += dr;
-        c += dc;
-      }
-    }
-    return moves;
-  }
-
-  private getSteppingMoves(pos: Position, offsets: number[][], board: (Piece | null)[][]): Position[] {
-    const moves: Position[] = [];
-    const piece = board[pos.row][pos.col]!;
-    
-    for (const [dr, dc] of offsets) {
-      const r = pos.row + dr, c = pos.col + dc;
-      if (this.isValidPos(r, c)) {
-        const target = board[r][c];
-        if (!target || target.color !== piece.color) {
-          moves.push({ row: r, col: c });
-        }
-      }
-    }
-    return moves;
-  }
-
-  private isKingInCheck(color: Color, board: (Piece | null)[][]): boolean {
-    let kingPos: Position | null = null;
-    
-    // Find King
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const p = board[r][c];
-        if (p && p.type === 'k' && p.color === color) {
-          kingPos = { row: r, col: c };
-          break;
-        }
-      }
-      if (kingPos) break;
-    }
-
-    if (!kingPos) return false; // Should not happen
-
-    // Check if any opponent piece attacks the king
-    const opponent = color === 'w' ? 'b' : 'w';
-    
-    // Very simplified: Iterate all opponent pieces and see if they can move to kingPos
-    // Note: getValidMoves with checkSafety=false avoids infinite recursion
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const p = board[r][c];
-        if (p && p.color === opponent) {
-          const moves = this.getValidMoves({ row: r, col: c }, board, false);
-          if (moves.some(m => m.row === kingPos!.row && m.col === kingPos!.col)) {
-            return true;
-          }
-        }
-      }
-    }
-
-    return false;
-  }
-
-  private hasAnyValidMoves(color: Color, board: (Piece | null)[][]): boolean {
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const p = board[r][c];
-        if (p && p.color === color) {
-          const moves = this.getValidMoves({ row: r, col: c }, board, true);
-          if (moves.length > 0) return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  private isValidPos(r: number, c: number) {
-    return r >= 0 && r < 8 && c >= 0 && c < 8;
-  }
-
-  private copyBoard(board: (Piece | null)[][]): (Piece | null)[][] {
-    return board.map(row => row.map(p => p ? { ...p } : null));
-  }
-
-  private createInitialBoard(): (Piece | null)[][] {
-    const board: (Piece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
-    const setupRow = (row: number, color: Color, pieces: PieceType[]) => {
-      pieces.forEach((type, col) => board[row][col] = { type, color, hasMoved: false });
-    };
-
-    const backRow: PieceType[] = ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'];
-    setupRow(0, 'b', backRow);
-    setupRow(1, 'b', Array(8).fill('p'));
-    setupRow(6, 'w', Array(8).fill('p'));
-    setupRow(7, 'w', backRow);
-
-    return board;
+  private colorChar(c: ColorCode): Color {
+    return c === WHITE ? 'w' : 'b';
   }
 }

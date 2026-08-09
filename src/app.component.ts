@@ -8,7 +8,8 @@ import { WelcomeScreenComponent } from './components/welcome-screen.component';
 import { SettingsScreenComponent } from './components/settings-screen.component';
 import { GameScreenComponent } from './components/game-screen.component';
 import { HistoryScreenComponent } from './components/history-screen.component';
-import { GameMode, Difficulty, AppScreen } from './models/app.types';
+import { GameMode, LevelId, DEFAULT_LEVEL, AppScreen } from './models/app.types';
+import { legacyDifficultyFromLevel } from './engine/levels.ts';
 
 @Component({
   selector: 'app-root',
@@ -33,7 +34,7 @@ export class AppComponent {
 
   // Game Settings
   gameMode = signal<GameMode>('human');
-  difficulty = signal<Difficulty>('medium');
+  level = signal<LevelId>(DEFAULT_LEVEL);
   playerColor = signal<'w' | 'b'>('w');
 
   // API Key management
@@ -62,22 +63,21 @@ export class AppComponent {
   }
 
   // Game Management
-  startNewGame(config: { gameMode: GameMode; difficulty: Difficulty; playerColor: 'w' | 'b' }) {
+  startNewGame(config: { gameMode: GameMode; level: LevelId; playerColor: 'w' | 'b' }) {
     this.gameMode.set(config.gameMode);
-    this.difficulty.set(config.difficulty);
+    this.level.set(config.level);
     this.playerColor.set(config.playerColor);
 
-    // Start game in history service
-    this.history.startNewGame(config.gameMode, config.difficulty);
+    // Saved games still record the legacy label so old history keeps rendering
+    this.history.startNewGame(config.gameMode, legacyDifficultyFromLevel(config.level));
 
-    // Reset chess engine
     this.chess.resetGame();
     this.currentScreen.set('game');
   }
 
-  applySettings(config: { gameMode: GameMode; difficulty: Difficulty }) {
+  applySettings(config: { gameMode: GameMode; level: LevelId }) {
     this.gameMode.set(config.gameMode);
-    this.difficulty.set(config.difficulty);
+    this.level.set(config.level);
     this.goToGame();
   }
 

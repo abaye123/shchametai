@@ -2,11 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------
+   Fonts - bundled locally, no external requests (offline friendly)
+   --------------------------------------------------------------- */
 @font-face {
   font-family: 'Rubik';
   src: url('/src/assets/Rubik-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -14,6 +18,7 @@
   src: url('/src/assets/Rubik-Medium.ttf') format('truetype');
   font-weight: 500;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -21,12 +26,226 @@
   src: url('/src/assets/Rubik-Bold.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
+  font-display: swap;
 }
 
-body {
-  font-family: 'Rubik', 'Arial', sans-serif;
+/* ---------------------------------------------------------------
+   Design tokens
+   --------------------------------------------------------------- */
+@layer base {
+  :root {
+    --radius-card: 1.75rem;
+    --radius-control: 1rem;
+    --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-bounce: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+    /* Board colours */
+    --sq-light: #f3e2c3;
+    --sq-light-2: #ecd6b0;
+    --sq-dark: #a9784f;
+    --sq-dark-2: #97673f;
+    --sq-select: #ffd257;
+    --sq-last: #d9e8a4;
+    --sq-danger: #f79a8f;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+    overscroll-behavior: none;
+  }
+
+  body {
+    font-family: 'Rubik', 'Arial', sans-serif;
+    color: theme('colors.sand.900');
+    background: radial-gradient(120% 90% at 12% 0%, #fff8ec 0%, #f8f1e4 42%, #f1e7d6 100%);
+    background-attachment: fixed;
+  }
+
+  /* Rounded, unobtrusive scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.sand.300') transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: theme('colors.sand.300');
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: theme('colors.sand.400');
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px theme('colors.honey.300');
+    border-radius: inherit;
+  }
 }
 
+/* ---------------------------------------------------------------
+   Components
+   --------------------------------------------------------------- */
+@layer components {
+  /* --- Surfaces --- */
+  .card {
+    @apply bg-white/85 rounded-4xl shadow-soft border border-white/70 backdrop-blur-sm;
+  }
+
+  .card-flat {
+    @apply bg-white/70 rounded-3xl border border-sand-200/70;
+  }
+
+  .card-pad {
+    @apply p-5 sm:p-6;
+  }
+
+  /* --- Buttons --- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5
+           font-semibold text-sm leading-none select-none
+           transition-all duration-200 ease-out
+           active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  .btn-lg {
+    @apply rounded-3xl px-6 py-4 text-base gap-3;
+  }
+
+  .btn-sm {
+    @apply rounded-xl px-3 py-2 text-xs;
+  }
+
+  .btn-primary {
+    @apply btn text-white shadow-lift;
+    background-image: linear-gradient(140deg, theme('colors.honey.400'), theme('colors.honey.600'));
+  }
+
+  .btn-primary:hover {
+    background-image: linear-gradient(140deg, theme('colors.honey.300'), theme('colors.honey.500'));
+    transform: translateY(-1px);
+  }
+
+  .btn-accent {
+    @apply btn text-white shadow-lift;
+    background-image: linear-gradient(140deg, theme('colors.orchid.400'), theme('colors.orchid.600'));
+  }
+
+  .btn-accent:hover {
+    background-image: linear-gradient(140deg, theme('colors.orchid.300'), theme('colors.orchid.500'));
+    transform: translateY(-1px);
+  }
+
+  .btn-success {
+    @apply btn text-white shadow-lift;
+    background-image: linear-gradient(140deg, #4ade80, #15803d);
+  }
+
+  .btn-success:hover {
+    background-image: linear-gradient(140deg, #6ee7a0, #16a34a);
+    transform: translateY(-1px);
+  }
+
+  .btn-danger {
+    @apply btn text-white shadow-lift;
+    background-image: linear-gradient(140deg, #fb7185, #be123c);
+  }
+
+  .btn-danger:hover {
+    background-image: linear-gradient(140deg, #fda4af, #e11d48);
+    transform: translateY(-1px);
+  }
+
+  .btn-soft {
+    @apply btn bg-white/80 text-sand-800 border border-sand-200 shadow-soft;
+  }
+
+  .btn-soft:hover {
+    @apply bg-white border-sand-300 shadow-lift;
+    transform: translateY(-1px);
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-sand-700;
+  }
+
+  .btn-ghost:hover {
+    @apply bg-sand-900/5;
+  }
+
+  .btn-glass {
+    @apply btn bg-white/15 text-white border border-white/25 backdrop-blur-sm;
+  }
+
+  .btn-glass:hover {
+    @apply bg-white/25;
+  }
+
+  /* --- Segmented control (pill group) --- */
+  .segment {
+    @apply flex gap-1.5 p-1.5 rounded-3xl bg-sand-100/80 border border-sand-200/70;
+  }
+
+  .segment-item {
+    @apply flex-1 rounded-2xl px-3 py-2.5 text-sm font-semibold text-sand-600
+           transition-all duration-200 ease-out active:scale-[0.97]
+           flex items-center justify-center gap-2;
+  }
+
+  .segment-item:hover {
+    @apply bg-white/70 text-sand-800;
+  }
+
+  .segment-item.is-active {
+    @apply bg-white text-sand-900 shadow-soft;
+  }
+
+  /* --- Form controls --- */
+  .field {
+    @apply w-full rounded-2xl border border-sand-200 bg-white/90 px-4 py-3 text-sm
+           placeholder:text-sand-400 transition-all duration-200;
+  }
+
+  .field:focus {
+    @apply outline-none border-honey-300 bg-white;
+    box-shadow: theme('boxShadow.glow-honey');
+  }
+
+  /* --- Chips / badges --- */
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold;
+  }
+
+  .section-title {
+    @apply flex items-center gap-2 font-bold text-sand-800;
+  }
+
+  /* --- Layout helpers --- */
+  .screen-scroll {
+    @apply h-full overflow-y-auto overflow-x-hidden;
+  }
+}
+
+/* ---------------------------------------------------------------
+   Chess board
+   --------------------------------------------------------------- */
 .chess-piece {
   cursor: grab;
   user-select: none;
@@ -34,4 +253,14 @@ body {
 
 .chess-piece:active {
   cursor: grabbing;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

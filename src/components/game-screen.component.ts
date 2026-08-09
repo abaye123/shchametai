@@ -1,4 +1,4 @@
-import { Component, inject, signal, effect, untracked, input, output } from '@angular/core';
+import { Component, inject, signal, computed, effect, untracked, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { I18nService } from '../services/i18n.service';
@@ -41,8 +41,34 @@ export class GameScreenComponent {
   showMoveHistory = signal<boolean>(true);
   editingGameName = signal<boolean>(false);
   tempGameName = signal<string>('');
+  gameOverDismissed = signal<boolean>(false);
+
+  /** The end-of-game overlay is shown until the player dismisses it. */
+  showGameOver = computed(() => !this.gameOverDismissed());
+
+  /** Number of moves in the game currently loaded, 0 when there is none. */
+  totalMoves = computed(() => this.history.currentGame()?.moves.length ?? 0);
+
+  /** Material balance in pawns. Positive = white is ahead. */
+  materialDiff = computed(() => {
+    const values: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+    let diff = 0;
+    for (const move of this.chess.history()) {
+      if (!move.captured) continue;
+      const value = values[move.captured.type] ?? 0;
+      // capturing a black piece is a gain for white, and vice versa
+      diff += move.captured.color === 'b' ? value : -value;
+    }
+    return diff;
+  });
 
   constructor() {
+    // A fresh position means the previous result banner is no longer relevant
+    effect(() => {
+      this.chess.history().length;
+      untracked(() => this.gameOverDismissed.set(false));
+    });
+
     // Effect to trigger Computer move
     effect(() => {
       const turn = this.chess.turn();
@@ -91,11 +117,11 @@ export class GameScreenComponent {
   }
 
   getPieceSymbol(piece: Piece): string {
+    // Solid glyphs for both colours, matching the board - colour comes from CSS
     const symbols: Record<string, string> = {
-      'w-k': '♔', 'w-q': '♕', 'w-r': '♖', 'w-b': '♗', 'w-n': '♘', 'w-p': '♙',
-      'b-k': '♚', 'b-q': '♛', 'b-r': '♜', 'b-b': '♝', 'b-n': '♞', 'b-p': '♟︎'
+      'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
     };
-    return symbols[`${piece.color}-${piece.type}`] || '';
+    return symbols[piece.type] || '';
   }
 
   async onGetAiHint() {
@@ -205,6 +231,10 @@ export class GameScreenComponent {
 
   toggleMoveHistory() {
     this.showMoveHistory.update(v => !v);
+  }
+
+  dismissGameOver() {
+    this.gameOverDismissed.set(true);
   }
 
   // Game name management

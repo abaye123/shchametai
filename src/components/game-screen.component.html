@@ -1,255 +1,294 @@
-<main class="max-w-4xl mx-auto p-4 flex flex-col gap-6 relative">
-  
-  <!-- Replay Mode Banner -->
+<main class="h-full flex flex-col gap-2.5 p-3 sm:p-4 overflow-hidden">
+
+  <!-- ============ Replay Mode Banner ============ -->
   @if (history.isReplayMode()) {
-    <div class="bg-indigo-600 text-white p-4 rounded-xl shadow-lg">
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-          </svg>
-          <span class="font-bold">{{ i18n.t().replayMode }}</span>
+    <div class="flex-none rounded-4xl px-4 py-3 text-white shadow-lift animate-slide-up
+                bg-gradient-to-br from-orchid-500 via-orchid-600 to-orchid-800">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2 font-bold">
+          <span class="grid place-items-center w-8 h-8 rounded-2xl bg-white/20 border border-white/25">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="size-4">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+            </svg>
+          </span>
+          <span class="text-sm">{{ i18n.t().replayMode }}</span>
         </div>
-        <button 
-          (click)="onExitReplay()"
-          class="px-4 py-2 bg-white text-indigo-600 hover:bg-indigo-50 rounded-lg font-semibold transition-colors">
+
+        <div class="flex items-center gap-1.5 flex-1 min-w-0 justify-center">
+          <button (click)="onReplayGoToStart()" [disabled]="history.replayIndex() === 0" class="btn-glass btn-sm">⏮</button>
+          <button (click)="onReplayPrevious()" [disabled]="history.replayIndex() === 0" class="btn-glass btn-sm">◀</button>
+          <div class="px-3 py-1.5 rounded-xl bg-white/15 border border-white/20 text-xs font-semibold whitespace-nowrap">
+            {{ history.replayIndex() }} / {{ totalMoves() }}
+          </div>
+          <button (click)="onReplayNext()" [disabled]="history.replayIndex() >= (totalMoves())" class="btn-glass btn-sm">▶</button>
+          <button (click)="onReplayGoToEnd()" [disabled]="history.replayIndex() >= (totalMoves())" class="btn-glass btn-sm">⏭</button>
+        </div>
+
+        <button (click)="onExitReplay()" class="btn btn-sm bg-white text-orchid-700 hover:bg-orchid-50 shadow-soft">
           {{ i18n.t().exitReplay }}
         </button>
       </div>
-      
-      <!-- Replay Controls -->
-      <div class="flex items-center gap-2">
-        <button 
-          (click)="onReplayGoToStart()"
-          [disabled]="history.replayIndex() === 0"
-          class="px-3 py-2 bg-white/20 hover:bg-white/30 disabled:opacity-30 rounded text-sm font-semibold transition-colors">
-          ⏮
-        </button>
-        <button 
-          (click)="onReplayPrevious()"
-          [disabled]="history.replayIndex() === 0"
-          class="px-4 py-2 bg-white/20 hover:bg-white/30 disabled:opacity-30 rounded font-semibold transition-colors">
-          ◀ {{ i18n.t().previousMove }}
-        </button>
-        <div class="flex-1 text-center font-semibold">
-          {{ i18n.t().moveNumber }} {{ history.replayIndex() }} / {{ history.currentGame()?.moves.length || 0 }}
-        </div>
-        <button 
-          (click)="onReplayNext()"
-          [disabled]="history.replayIndex() >= (history.currentGame()?.moves.length || 0)"
-          class="px-4 py-2 bg-white/20 hover:bg-white/30 disabled:opacity-30 rounded font-semibold transition-colors">
-          {{ i18n.t().nextMove }} ▶
-        </button>
-        <button 
-          (click)="onReplayGoToEnd()"
-          [disabled]="history.replayIndex() >= (history.currentGame()?.moves.length || 0)"
-          class="px-3 py-2 bg-white/20 hover:bg-white/30 disabled:opacity-30 rounded text-sm font-semibold transition-colors">
-          ⏭
-        </button>
-      </div>
     </div>
   }
 
-  <!-- Game Status Bar -->
-  <div class="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-xl shadow-sm gap-4">
-    
-    <div class="flex items-center gap-3">
-      <div class="text-lg font-bold flex items-center gap-2">
-        @if (chess.turn() === 'w') {
-           <span class="text-2xl">♔</span> 
-           <span>{{ i18n.t().turnWhite }}</span>
-           @if (chess.isCheck()) {
-             <span class="text-red-600 font-bold animate-pulse">{{ i18n.t().check }}</span>
-           }
-        } @else {
-           <span class="text-2xl">♚</span> 
-           <span>{{ i18n.t().turnBlack }}</span>
-           @if (chess.isCheck()) {
-             <span class="text-red-600 font-bold animate-pulse">{{ i18n.t().check }}</span>
-           }
-        }
-        @if (isComputerMoving()) {
-          <span class="text-sm font-normal text-amber-600 animate-pulse ml-2">({{ i18n.t().aiThinking }})</span>
-        }
-      </div>
-    </div>
+  <!-- ============ Body ============ -->
+  <div class="flex-1 min-h-0 flex flex-col lg:flex-row gap-3
+              overflow-y-auto lg:overflow-hidden">
 
-    <div class="flex gap-2">
-      @if (!history.isReplayMode()) {
-        <button 
-          (click)="chess.undo()" 
-          [disabled]="chess.history().length === 0 || isComputerMoving()"
-          class="px-4 py-2 bg-stone-200 hover:bg-stone-300 disabled:opacity-50 rounded font-medium transition-colors">
-          {{ i18n.t().undo }}
-        </button>
-      }
-      <button 
-        (click)="onGoToSettings()" 
-        class="px-4 py-2 bg-amber-600 text-white hover:bg-amber-500 rounded font-medium shadow transition-colors">
-        {{ i18n.t().settings }}
-      </button>
-      <button 
-        (click)="onBackToMenu()"
-        class="px-4 py-2 bg-stone-600 text-white hover:bg-stone-700 rounded font-medium shadow transition-colors">
-        {{ i18n.t().backToMenu }}
-      </button>
-    </div>
-  </div>
+    <!-- ---------- Board column ---------- -->
+    <section class="flex flex-col gap-2 min-w-0 lg:flex-1 lg:min-h-0">
 
-  <!-- Alerts -->
-  @if (chess.isCheckmate()) {
-    <div class="relative p-8 rounded-2xl text-center font-bold text-3xl bg-gradient-to-r from-red-600 to-red-800 text-white shadow-2xl border-4 border-red-900 animate-bounce">
-      <div class="absolute inset-0 bg-red-500 opacity-20 rounded-2xl animate-pulse"></div>
-      <div class="relative z-10">
-        <div class="text-6xl mb-4">👑</div>
-        <div class="text-4xl mb-2">{{ i18n.t().checkmate }}</div>
-        <div class="text-2xl">{{ chess.winner() === 'w' ? i18n.t().white : i18n.t().black }}</div>
-      </div>
-    </div>
-  } @else if (chess.isStalemate()) {
-    <div class="p-6 rounded-xl text-center font-bold text-2xl bg-gray-200 text-gray-800 shadow-lg">
-      <div class="text-4xl mb-2">🤝</div>
-      <span>{{ i18n.t().stalemate }}</span>
-    </div>
-  }
+      <!-- Toolbar -->
+      <div class="flex-none card rounded-3xl px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="chip bg-sand-100 text-sand-700 border border-sand-200">
+            <span class="w-2 h-2 rounded-full"
+                  [class.bg-honey-500]="chess.turn() === 'w'"
+                  [class.bg-sand-700]="chess.turn() === 'b'"></span>
+            {{ chess.turn() === 'w' ? i18n.t().turnWhite : i18n.t().turnBlack }}
+          </span>
 
-  <!-- Chess Board Area -->
-  <div class="flex flex-col md:flex-row gap-8 items-start justify-center">
-    
-    <!-- Captured Pieces (Left/Right based on RTL) -->
-    <div class="hidden md:block w-20 relative">
-      <div class="sticky top-24">
-        <div class="bg-white p-3 rounded-lg shadow-sm">
-          <div class="text-xs font-bold text-stone-500 mb-2 text-center">{{ i18n.currentLang() === 'he' ? 'נתפסו' : 'Captured' }}</div>
-          <!-- White captured pieces -->
-          <div class="flex flex-col gap-1 items-center mb-4">
-            @for (p of getCaptured('w'); track $index) {
-              <span class="text-2xl text-stone-400 transition-all duration-300 hover:scale-110" 
-                    style="animation: slideIn 0.3s ease-out;">
-                {{ getPieceSymbol(p) }}
-              </span>
-            }
-          </div>
-          <div class="border-t border-stone-200 my-2"></div>
-          <!-- Black captured pieces -->
-          <div class="flex flex-col gap-1 items-center">
-            @for (p of getCaptured('b'); track $index) {
-              <span class="text-2xl text-stone-800 transition-all duration-300 hover:scale-110"
-                    style="animation: slideIn 0.3s ease-out;">
-                {{ getPieceSymbol(p) }}
-              </span>
-            }
-          </div>
+          @if (chess.isCheck() && !chess.isCheckmate()) {
+            <span class="chip bg-rose-100 text-rose-700 border border-rose-200 animate-breathe">
+              ⚠ {{ i18n.t().check }}
+            </span>
+          }
+          @if (isComputerMoving()) {
+            <span class="chip bg-orchid-100 text-orchid-700 border border-orchid-200 animate-breathe">
+              {{ i18n.t().aiThinking }}
+            </span>
+          }
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          @if (!history.isReplayMode()) {
+            <button
+              (click)="chess.undo()"
+              [disabled]="chess.history().length === 0 || isComputerMoving()"
+              class="btn-soft btn-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="size-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+              </svg>
+              <span class="hidden sm:inline">{{ i18n.t().undo }}</span>
+            </button>
+          }
+          <button (click)="onGoToSettings()" class="btn-soft btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="size-4">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.03 7.03 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.397-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+            <span class="hidden sm:inline">{{ i18n.t().settings }}</span>
+          </button>
+          <button (click)="onBackToMenu()" class="btn-primary btn-sm">
+            {{ i18n.t().backToMenu }}
+          </button>
         </div>
       </div>
-    </div>
-    
-    <!-- The Board -->
-    <app-board class="flex-1 w-full relative z-0" [class.pointer-events-none]="isComputerMoving() || history.isReplayMode()"></app-board>
-    
-    <!-- Mobile Captured / AI Area -->
-    <div class="w-full md:w-64 flex flex-col gap-4">
-      
+
+      <!-- Black player strip -->
+      <div class="flex-none rounded-3xl px-3 py-1.5 flex items-center gap-2 transition-all duration-300
+                  border"
+           [class.bg-white]="chess.turn() === 'b'"
+           [class.border-honey-300]="chess.turn() === 'b'"
+           [class.shadow-soft]="chess.turn() === 'b'"
+           [class.border-transparent]="chess.turn() !== 'b'">
+        <span class="grid place-items-center w-7 h-7 rounded-xl bg-sand-800 text-white text-base flex-none">♚</span>
+        <span class="text-xs font-bold text-sand-700 flex-none">{{ i18n.t().black }}</span>
+        <div class="flex flex-wrap items-center gap-0.5 min-w-0 flex-1">
+          @for (p of getCaptured('w'); track $index) {
+            <span class="text-base leading-none text-sand-400 animate-slide-side">{{ getPieceSymbol(p) }}</span>
+          }
+        </div>
+        @if (materialDiff() < 0) {
+          <span class="chip bg-sand-800 text-white flex-none">+{{ -materialDiff() }}</span>
+        }
+      </div>
+
+      <!-- The board: takes all remaining height -->
+      <div class="relative w-full aspect-square max-h-[58dvh]
+                  lg:aspect-auto lg:max-h-none lg:flex-1 lg:min-h-0">
+        <app-board
+          [class.pointer-events-none]="isComputerMoving() || history.isReplayMode()">
+        </app-board>
+
+        <!-- Game over overlay (does not push the layout around) -->
+        @if ((chess.isCheckmate() || chess.isStalemate()) && showGameOver()) {
+          <div class="absolute inset-0 z-20 grid place-items-center rounded-4xl
+                      bg-sand-900/45 backdrop-blur-[3px] p-4 animate-pop-in">
+            <div class="card rounded-4xl px-8 py-7 text-center max-w-sm w-full shadow-float bg-white">
+              @if (chess.isCheckmate()) {
+                <div class="mx-auto mb-4 grid place-items-center w-16 h-16 rounded-3xl text-3xl animate-drop-in"
+                     [class.bg-white]="chess.winner() === 'w'"
+                     [class.border]="chess.winner() === 'w'"
+                     [class.border-sand-300]="chess.winner() === 'w'"
+                     [class.text-sand-800]="chess.winner() === 'w'"
+                     [class.bg-sand-800]="chess.winner() === 'b'"
+                     [class.text-white]="chess.winner() === 'b'">♚</div>
+                <div class="text-2xl font-bold text-rose-700 mb-1">{{ i18n.t().checkmate }}</div>
+                <div class="text-lg font-semibold text-sand-700 mb-5">
+                  {{ chess.winner() === 'w' ? i18n.t().white : i18n.t().black }}
+                </div>
+              } @else {
+                <div class="mx-auto mb-4 grid place-items-center w-16 h-16 rounded-3xl bg-sand-100 text-sand-500 animate-drop-in">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
+                  </svg>
+                </div>
+                <div class="text-2xl font-bold text-sand-800 mb-5">{{ i18n.t().stalemate }}</div>
+              }
+              <div class="flex gap-2">
+                <button (click)="dismissGameOver()" class="btn-soft flex-1">
+                  {{ i18n.currentLang() === 'he' ? 'צפייה בלוח' : 'View board' }}
+                </button>
+                <button (click)="onBackToMenu()" class="btn-primary flex-1">
+                  {{ i18n.t().backToMenu }}
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- White player strip -->
+      <div class="flex-none rounded-3xl px-3 py-1.5 flex items-center gap-2 transition-all duration-300
+                  border"
+           [class.bg-white]="chess.turn() === 'w'"
+           [class.border-honey-300]="chess.turn() === 'w'"
+           [class.shadow-soft]="chess.turn() === 'w'"
+           [class.border-transparent]="chess.turn() !== 'w'">
+        <span class="grid place-items-center w-7 h-7 rounded-xl bg-white border border-sand-300 text-sand-800 text-base flex-none">♚</span>
+        <span class="text-xs font-bold text-sand-700 flex-none">{{ i18n.t().white }}</span>
+        <div class="flex flex-wrap items-center gap-0.5 min-w-0 flex-1">
+          @for (p of getCaptured('b'); track $index) {
+            <span class="text-base leading-none text-sand-500 animate-slide-side">{{ getPieceSymbol(p) }}</span>
+          }
+        </div>
+        @if (materialDiff() > 0) {
+          <span class="chip bg-honey-500 text-white flex-none">+{{ materialDiff() }}</span>
+        }
+      </div>
+    </section>
+
+    <!-- ---------- Side panel ---------- -->
+    <aside class="flex-none w-full lg:w-[320px] xl:w-[360px] flex flex-col gap-3
+                  lg:min-h-0 lg:overflow-y-auto lg:pe-1">
+
       <!-- Game Name & Favorite -->
       @if (history.currentGame() && !history.isReplayMode()) {
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-100">
+        <div class="card card-pad !py-4 flex-none">
           <div class="flex items-center justify-between mb-2">
-            <h3 class="font-bold text-stone-700 text-sm">{{ i18n.t().gameName }}</h3>
-            <button 
+            <h3 class="section-title text-sm">{{ i18n.t().gameName }}</h3>
+            <button
               (click)="onToggleFavorite()"
-              class="p-1 hover:bg-stone-100 rounded transition-colors"
+              class="btn-ghost !p-1.5 !rounded-xl"
               [title]="history.currentGame()?.isFavorite ? i18n.t().removeFromFavorites : i18n.t().addToFavorites">
               @if (history.currentGame()?.isFavorite) {
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6 text-yellow-500">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-5 text-honey-400">
                   <path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clip-rule="evenodd" />
                 </svg>
               } @else {
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 text-stone-400">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5 text-sand-400">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
                 </svg>
               }
             </button>
           </div>
-          
+
           @if (!editingGameName()) {
             <div class="flex items-center gap-2">
-              <p class="text-sm text-stone-600 flex-1 truncate" [title]="history.currentGame()?.gameName || (i18n.currentLang() === 'he' ? 'ללא שם' : 'Unnamed')">
+              <p class="text-sm text-sand-600 flex-1 truncate"
+                 [title]="history.currentGame()?.gameName || (i18n.currentLang() === 'he' ? 'ללא שם' : 'Unnamed')">
                 {{ history.currentGame()?.gameName || (i18n.currentLang() === 'he' ? 'ללא שם' : 'Unnamed') }}
               </p>
-              <button 
-                (click)="startEditingGameName()"
-                class="px-2 py-1 text-xs bg-stone-100 hover:bg-stone-200 rounded transition-colors flex-shrink-0">
+              <button (click)="startEditingGameName()" class="btn-soft btn-sm flex-none">
                 {{ i18n.t().editName }}
               </button>
             </div>
           } @else {
             <div class="flex flex-col gap-2">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 [(ngModel)]="tempGameName"
-                class="px-2 py-1 text-sm border border-stone-300 rounded focus:outline-none focus:border-amber-500"
+                class="field !py-2 !text-sm"
                 placeholder="{{ i18n.t().gameName }}"
                 maxlength="50"
                 (keyup.enter)="saveGameName()"
                 (keyup.escape)="cancelEditGameName()" />
               <div class="flex gap-2">
-                <button 
-                  (click)="saveGameName()"
-                  class="flex-1 px-2 py-1 text-xs bg-amber-600 text-white hover:bg-amber-700 rounded transition-colors">
-                  {{ i18n.t().saveName }}
-                </button>
-                <button 
-                  (click)="cancelEditGameName()"
-                  class="flex-1 px-2 py-1 text-xs bg-stone-200 hover:bg-stone-300 rounded transition-colors">
-                  {{ i18n.t().cancel }}
-                </button>
+                <button (click)="saveGameName()" class="btn-primary btn-sm flex-1">{{ i18n.t().saveName }}</button>
+                <button (click)="cancelEditGameName()" class="btn-soft btn-sm flex-1">{{ i18n.t().cancel }}</button>
               </div>
             </div>
           }
         </div>
       }
 
+      <!-- AI Coach -->
+      @if (!history.isReplayMode()) {
+        <div class="flex-none rounded-4xl p-5 shadow-soft border border-orchid-200/60
+                    bg-gradient-to-br from-orchid-50 via-white to-orchid-50">
+          <h3 class="section-title text-sm text-orchid-800 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+            </svg>
+            AI Coach
+          </h3>
+          <p class="text-sm text-sand-600 min-h-[3rem] leading-relaxed">
+            @if (isThinking()) {
+              <span class="animate-breathe">{{ i18n.t().aiThinking }}</span>
+            } @else if (aiHintText()) {
+              {{ aiHintText() }}
+            } @else {
+              <span class="opacity-45 italic">...</span>
+            }
+          </p>
+          <button
+            (click)="onGetAiHint()"
+            [disabled]="isThinking() || chess.isCheckmate() || isComputerMoving()"
+            class="btn-accent w-full mt-3">
+            {{ i18n.t().aiHint }}
+          </button>
+        </div>
+      }
+
       <!-- Move History -->
       @if (history.currentGame()) {
-        <div class="bg-white rounded-xl shadow-sm border border-stone-100 overflow-hidden">
-          <div class="p-3 bg-amber-50 border-b border-stone-200 flex items-center justify-between">
-            <h3 class="font-bold text-amber-900 text-sm flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
+        <div class="card overflow-hidden flex flex-col lg:flex-1 lg:min-h-[10rem]">
+          <div class="flex-none px-4 py-3 border-b border-sand-200/70 bg-sand-50/60 flex items-center justify-between">
+            <h3 class="section-title text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
               </svg>
               {{ i18n.t().moveHistory }}
+              <span class="chip bg-sand-100 text-sand-600">{{ history.currentGame()!.moves.length }}</span>
             </h3>
-            <button 
-              (click)="toggleMoveHistory()"
-              class="text-xs px-2 py-1 bg-white hover:bg-stone-50 rounded transition-colors">
+            <button (click)="toggleMoveHistory()" class="btn-soft btn-sm">
               {{ showMoveHistory() ? i18n.t().hideMoves : i18n.t().showMoves }}
             </button>
           </div>
-          
+
           @if (showMoveHistory()) {
-            <div class="max-h-96 overflow-y-auto p-3">
+            <div class="flex-1 min-h-0 overflow-y-auto p-2 max-h-72 lg:max-h-none">
               @if (history.currentGame()!.moves.length === 0) {
-                <p class="text-sm text-stone-400 text-center py-4">
+                <p class="text-sm text-sand-400 text-center py-6">
                   {{ i18n.currentLang() === 'he' ? 'אין מהלכים עדיין' : 'No moves yet' }}
                 </p>
               } @else {
-                <div class="space-y-1">
+                <div class="flex flex-col gap-1">
                   @for (move of history.currentGame()!.moves.slice().reverse(); track $index) {
-                    <div 
-                      class="text-sm py-2 px-2 rounded hover:bg-stone-50 transition-colors"
-                      [class.bg-amber-100]="history.isReplayMode() && history.replayIndex() === $index + 1"
+                    <div
+                      class="flex items-center gap-2 text-sm py-2 px-3 rounded-2xl transition-colors hover:bg-sand-100/70"
+                      [class.bg-honey-100]="history.isReplayMode() && history.replayIndex() === $index + 1"
                       [class.font-semibold]="history.isReplayMode() && history.replayIndex() === $index + 1">
-                      <div class="flex items-center gap-2">
-                        <span class="text-xs text-stone-500 font-mono w-6">{{ history.currentGame()!.moves.length - $index }}.</span>
-                        <div class="flex-1">
-                          <div class="text-stone-700">{{ getMoveDescription(move, history.currentGame()!.moves.length - $index) }}</div>
-                        </div>
-                        @if (move.piece.color === 'w') {
-                          <span class="text-lg">♔</span>
-                        } @else {
-                          <span class="text-lg">♚</span>
-                        }
-                      </div>
+                      <span class="grid place-items-center flex-none w-6 h-6 rounded-lg bg-sand-100 text-[10px] font-bold text-sand-500">
+                        {{ history.currentGame()!.moves.length - $index }}
+                      </span>
+                      <span class="flex-1 text-sand-700 truncate">
+                        {{ getMoveDescription(move, history.currentGame()!.moves.length - $index) }}
+                      </span>
+                      <span class="flex-none text-base leading-none"
+                            [class.text-sand-400]="move.piece.color === 'w'"
+                            [class.text-sand-800]="move.piece.color === 'b'">♚</span>
                     </div>
                   }
                 </div>
@@ -258,60 +297,6 @@
           }
         </div>
       }
-      
-      <!-- AI Hint Box -->
-      @if (!history.isReplayMode()) {
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-100">
-          <div class="flex justify-between items-center mb-2">
-             <h3 class="font-bold text-amber-900 flex items-center gap-2">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5">
-                 <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
-               </svg>
-               AI Coach
-             </h3>
-          </div>
-          <p class="text-sm text-stone-600 min-h-[3rem]">
-            @if (isThinking()) {
-              <span class="animate-pulse">{{ i18n.t().aiThinking }}</span>
-            } @else if (aiHintText()) {
-              {{ aiHintText() }}
-            } @else {
-              <span class="opacity-50 italic">...</span>
-            }
-          </p>
-          <button 
-             (click)="onGetAiHint()"
-             [disabled]="isThinking() || chess.isCheckmate() || isComputerMoving()"
-             class="mt-3 w-full py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded border border-indigo-200 text-sm font-semibold transition-colors disabled:opacity-50">
-             {{ i18n.t().aiHint }}
-          </button>
-        </div>
-      }
-
-      <!-- Mobile captured view (visible only on small screens) -->
-      <div class="md:hidden bg-white p-3 rounded-xl shadow-sm flex flex-wrap gap-2 justify-center">
-          @for (p of getCaptured('w'); track $index) {
-              <span class="text-xl text-stone-400">{{ getPieceSymbol(p) }}</span>
-          }
-           <div class="border-l border-stone-300 mx-2"></div>
-          @for (p of getCaptured('b'); track $index) {
-              <span class="text-xl text-stone-800">{{ getPieceSymbol(p) }}</span>
-          }
-      </div>
-
-    </div>
+    </aside>
   </div>
 </main>
-
-<style>
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-</style>

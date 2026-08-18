@@ -132,6 +132,11 @@ export class GameScreenComponent {
 
   computerColor = computed<Color>(() => (this.playerColor() === 'w' ? 'b' : 'w'));
 
+  /** Playing black means looking at the board from the other side, so the
+      player's own pieces sit on the near rank - the same as sitting down at a
+      real board. The strips above and below the board swap with it. */
+  boardFlipped = computed(() => this.playerColor() === 'b');
+
   constructor() {
     // A fresh position means the previous result banner is no longer relevant
     effect(() => {

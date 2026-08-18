@@ -97,7 +97,8 @@
       </div>
 
       <!-- Black player strip -->
-      <div class="flex-none rounded-3xl px-3 py-1.5 flex items-center gap-2 transition-all duration-300
+      <div [style.order]="boardFlipped() ? 3 : 1"
+           class="flex-none rounded-3xl px-3 py-1.5 flex items-center gap-2 transition-all duration-300
                   border"
            [class.bg-white]="chess.turn() === 'b'"
            [class.border-honey-300]="chess.turn() === 'b'"
@@ -116,9 +117,11 @@
       </div>
 
       <!-- The board: takes all remaining height -->
-      <div class="relative w-full aspect-square max-h-[58dvh]
+      <div style="order: 2"
+           class="relative w-full aspect-square max-h-[58dvh]
                   lg:aspect-auto lg:max-h-none lg:flex-1 lg:min-h-0">
         <app-board
+          [flipped]="boardFlipped()"
           [class.pointer-events-none]="isComputerMoving() || history.isReplayMode()">
         </app-board>
 
@@ -177,7 +180,8 @@
       </div>
 
       <!-- White player strip -->
-      <div class="flex-none rounded-3xl px-3 py-1.5 flex items-center gap-2 transition-all duration-300
+      <div [style.order]="boardFlipped() ? 1 : 3"
+           class="flex-none rounded-3xl px-3 py-1.5 flex items-center gap-2 transition-all duration-300
                   border"
            [class.bg-white]="chess.turn() === 'w'"
            [class.border-honey-300]="chess.turn() === 'w'"

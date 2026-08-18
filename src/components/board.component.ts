@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChessEngineService, Piece } from '../services/chess-engine.service';
 import { I18nService } from '../services/i18n.service';
@@ -203,10 +203,9 @@ import { I18nService } from '../services/i18n.service';
     <div class="board-stage" dir="ltr">
       <div class="board-frame">
         <div class="board-grid">
-          @for (row of chess.board(); track $index) {
-            @let rIndex = $index;
-            @for (piece of row; track $index) {
-              @let cIndex = $index;
+          @for (rIndex of displayRows(); track rIndex) {
+            @for (cIndex of displayCols(); track cIndex) {
+              @let piece = chess.board()[rIndex][cIndex];
               @let isDark = (rIndex + cIndex) % 2 === 1;
               @let isSelected = chess.selectedSquare()?.row === rIndex && chess.selectedSquare()?.col === cIndex;
               @let isValid = isValidMove(rIndex, cIndex);
@@ -239,12 +238,12 @@ import { I18nService } from '../services/i18n.service';
                   </span>
                 }
 
-                @if (cIndex === 0) {
+                @if (cIndex === firstCol()) {
                   <span class="coord coord-rank"
                         [class.coord-on-light]="!isDark"
                         [class.coord-on-dark]="isDark">{{ 8 - rIndex }}</span>
                 }
-                @if (rIndex === 7) {
+                @if (rIndex === bottomRow()) {
                   <span class="coord coord-file"
                         [class.coord-on-light]="!isDark"
                         [class.coord-on-dark]="isDark">{{ files[cIndex] }}</span>
@@ -261,7 +260,24 @@ export class BoardComponent {
   chess = inject(ChessEngineService);
   i18n = inject(I18nService);
 
+  /** When true the board is drawn from black's side: a1 sits top-right. */
+  flipped = input<boolean>(false);
+
   files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+  /** Board rows/columns in drawing order. The model is always stored from
+      white's point of view, so flipping is purely a matter of which index we
+      visit first - every click still reports the true row/col. */
+  private static readonly ASC = [0, 1, 2, 3, 4, 5, 6, 7];
+  private static readonly DESC = [7, 6, 5, 4, 3, 2, 1, 0];
+
+  displayRows = computed(() => this.flipped() ? BoardComponent.DESC : BoardComponent.ASC);
+  displayCols = computed(() => this.flipped() ? BoardComponent.DESC : BoardComponent.ASC);
+
+  /** The column drawn on the left edge and the row drawn on the bottom edge,
+      which is where the rank and file labels belong. */
+  firstCol = computed(() => this.flipped() ? 7 : 0);
+  bottomRow = computed(() => this.flipped() ? 0 : 7);
 
   isValidMove(r: number, c: number): boolean {
     return this.chess.validMoves().some(m => m.row === r && m.col === c);

@@ -207,6 +207,33 @@ export class GameScreenComponent {
     }
   }
 
+  // --- Undo -----------------------------------------------------------------
+
+  /**
+   * Against the computer, undo must hand the turn back to the player. Taking
+   * back a single ply would only remove the computer's reply, and the move
+   * effect would immediately play it again.
+   */
+  canUndo = computed(() => {
+    if (this.isComputerMoving()) return false;
+    const moves = this.chess.history();
+    if (this.gameMode() !== 'computer') return moves.length > 0;
+    return moves.some(m => m.piece.color === this.playerColor());
+  });
+
+  onUndo() {
+    if (!this.canUndo()) return;
+
+    if (this.gameMode() !== 'computer') {
+      this.chess.undo();
+      return;
+    }
+
+    do {
+      this.chess.undo();
+    } while (this.chess.history().length > 0 && this.chess.turn() !== this.playerColor());
+  }
+
   // --- Promotion ------------------------------------------------------------
 
   onPromotionChosen(piece: PromotionPiece) {

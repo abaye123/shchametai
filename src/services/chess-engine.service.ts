@@ -158,6 +158,7 @@ export class ChessEngineService {
     this.pos.unmakeMove();
     this.uciHistory.pop();
     this.history.update(h => h.slice(0, -1));
+    this.historyService.removeLastMove();
     this.selectedSquare.set(null);
     this.validMoves.set([]);
     this.pendingPromotion.set(null);

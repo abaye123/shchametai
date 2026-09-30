@@ -74,6 +74,21 @@ export class GameHistoryService {
     }
   }
 
+  // Drop the last recorded move after a take-back. Undoing out of a finished
+  // game reopens it, so the stored result goes back to ongoing as well.
+  removeLastMove() {
+    const game = this.currentGame();
+    if (!game || this.isReplayMode() || game.moves.length === 0) return;
+
+    game.moves.pop();
+    game.result = 'ongoing';
+    this.currentGame.set({ ...game });
+
+    if (this.autoSave()) {
+      this.saveCurrentGame();
+    }
+  }
+
   // Update game result
   updateGameResult(result: 'white' | 'black' | 'draw') {
     const game = this.currentGame();

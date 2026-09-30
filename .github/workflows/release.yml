@@ -1,0 +1,106 @@
+name: Release
+
+# Bumps the version, builds the Windows installers and a portable exe, then
+# publishes them as the latest GitHub release. The version commit and tag are
+# only pushed after the build succeeds, so a failed run leaves main untouched.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # The version lives in three places: package.json, package-lock.json
+      # and tauri.conf.json (which names the installer files).
+      - name: Bump version
+        id: version
+        run: |
+          npm version "${{ inputs.bump }}" --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          node -e "
+            const fs = require('fs');
+            const file = 'src-tauri/tauri.conf.json';
+            const conf = JSON.parse(fs.readFileSync(file, 'utf8'));
+            conf.version = '$VERSION';
+            fs.writeFileSync(file, JSON.stringify(conf, null, 2) + '\n');
+          "
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Runs `npm run build` first via beforeBuildCommand, then bundles NSIS + MSI.
+      - name: Build
+        run: npx tauri build
+
+      - name: Collect installers
+        run: |
+          mkdir -p release
+          cp src-tauri/target/release/bundle/nsis/*.exe release/
+          cp src-tauri/target/release/bundle/msi/*.msi release/
+
+      # Rebuilds only the app crate with the `portable` feature, which keeps its
+      # data in a folder next to the exe. This overwrites app.exe, so it must
+      # run after the installers were collected. The frontend is embedded in
+      # the binary, so the bare exe runs on its own; it relies on WebView2,
+      # which ships with Windows 10/11.
+      - name: Build portable
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          npx tauri build --no-bundle --features portable
+          cp src-tauri/target/release/app.exe "release/shchametai_${VERSION}_x64-portable.exe"
+          ls -l release
+
+      - name: Commit and tag
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src-tauri/tauri.conf.json
+          git commit -m "v$VERSION"
+          git tag "v$VERSION"
+          git push origin HEAD:${{ github.ref_name }} "v$VERSION"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "v$VERSION" release/* \
+            --title "shchametai v$VERSION" \
+            --generate-notes \
+            --latest

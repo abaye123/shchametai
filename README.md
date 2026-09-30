@@ -93,6 +93,30 @@ npm run build
 npm run tauri:build
 ```
 
+### Releasing
+
+Releases are built by the `Release` GitHub Actions workflow (`.github/workflows/release.yml`).
+Run it from the Actions tab, or:
+
+```bash
+gh workflow run release.yml -f bump=patch   # or minor / major
+```
+
+The workflow bumps the version in `package.json`, `package-lock.json` and
+`src-tauri/tauri.conf.json`, runs `tauri build` on Windows, pushes a `vX.Y.Z`
+commit and tag, and publishes a GitHub release with:
+
+- `shchametai_X.Y.Z_x64-setup.exe` - NSIS installer
+- `shchametai_X.Y.Z_x64_en-US.msi` - MSI installer
+- `shchametai_X.Y.Z_x64-portable.exe` - portable exe, no install needed (requires WebView2, included in Windows 10/11)
+
+The portable exe is built with the `portable` Cargo feature. It keeps its data
+(saved games, settings, API key) in a `shchametai-data` folder next to the exe,
+so the two can be moved to another machine together. If that folder cannot be
+written, it falls back to the regular per-user location.
+
+To build it locally: `npx tauri build --no-bundle --features portable`
+
 ## Project Structure
 
 ```
